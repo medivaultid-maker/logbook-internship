@@ -13,12 +13,13 @@ export async function POST(request: Request) {
     }
 
     const chatId = message.chat.id;
-    const text = message.text || "";
+    const text = message.text?.trim() || "";
 
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
     if (!token) {
       console.error("TELEGRAM_BOT_TOKEN belum diatur");
+
       return NextResponse.json(
         {
           ok: false,
@@ -29,13 +30,53 @@ export async function POST(request: Request) {
     }
 
     let reply = "";
+    let replyMarkup = undefined;
 
-    if (text.toLowerCase() === "/start") {
+    // =========================
+    // MENU START
+    // =========================
+
+    if (text === "/start") {
       reply =
-        "Halo! 👋\n\nSelamat datang di Bot Logbook Internsip.\n\nKirim pesan apa saja untuk mencoba bot ini.";
-    } else {
-      reply = `Halo! 👋\n\nPesan kamu sudah diterima:\n"${text}"`;
+        "🩺 *Logbook Internsip Kemenkes*\n\n" +
+        "Selamat datang! 👋\n\n" +
+        "Silakan pilih jenis kegiatan yang ingin kamu input:";
+
+      replyMarkup = {
+        inline_keyboard: [
+          [
+            { text: "🩺 UKP", callback_data: "menu_ukp" },
+            { text: "🌱 UKM", callback_data: "menu_ukm" },
+          ],
+          [
+            { text: "💉 Tindakan Medis", callback_data: "menu_tindakan" },
+          ],
+          [
+            { text: "📋 Mini Project", callback_data: "menu_miniproject" },
+          ],
+        ],
+      };
     }
+
+    // =========================
+    // FALLBACK
+    // =========================
+
+    else {
+      reply =
+        "Aku belum memahami perintah tersebut 😅\n\n" +
+        "Ketik /start untuk membuka menu Logbook Internsip.";
+
+      replyMarkup = {
+        inline_keyboard: [
+          [{ text: "🏠 Menu Utama", callback_data: "menu_start" }],
+        ],
+      };
+    }
+
+    // =========================
+    // KIRIM PESAN
+    // =========================
 
     const telegramResponse = await fetch(
       `https://api.telegram.org/bot${token}/sendMessage`,
@@ -47,6 +88,8 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           chat_id: chatId,
           text: reply,
+          parse_mode: "Markdown",
+          reply_markup: replyMarkup,
         }),
       }
     );
