@@ -1,28 +1,47 @@
 import { NextResponse } from "next/server";
 
+/* =====================================================
+   TYPE
+===================================================== */
+
 type Session = {
   step: string;
   data: Record<string, string>;
 };
 
+/* =====================================================
+   SESSION SEMENTARA
+===================================================== */
+
 const sessions = new Map<number, Session>();
 
-// =====================================================
-// TELEGRAM API
-// =====================================================
+/* =====================================================
+   ENV
+===================================================== */
 
-function getTelegramApi() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-  if (!token) {
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+const SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+/* =====================================================
+   TELEGRAM API
+===================================================== */
+
+function telegramApiUrl(method: string) {
+  if (!TELEGRAM_BOT_TOKEN) {
     throw new Error("TELEGRAM_BOT_TOKEN belum diatur");
   }
 
-  return `https://api.telegram.org/bot${token}`;
+  return `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
 }
 
 async function telegram(method: string, body: any) {
-  const response = await fetch(`${getTelegramApi()}/${method}`, {
+  const response = await fetch(telegramApiUrl(method), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -32,22 +51,119 @@ async function telegram(method: string, body: any) {
 
   const result = await response.json();
 
-  console.log(`Telegram ${method}:`, result);
+  if (!response.ok) {
+    console.error("Telegram API error:", result);
+  }
 
   return result;
 }
 
-// =====================================================
-// MENU UTAMA
-// =====================================================
+/* =====================================================
+   SUPABASE INSERT
+===================================================== */
 
-async function showMainMenu(chatId: number, messageId?: number) {
-  const payload = {
+async function saveUKPToSupabase(data: Record<string, string>) {
+  if (!SUPABASE_URL) {
+    throw new Error("SUPABASE_URL belum diatur");
+  }
+
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY belum diatur");
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/ukp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({
+      tanggal_pelayanan: data.tanggal_pelayanan,
+      no_rm: data.no_rm || null,
+      jenis_tindakan: data.jenis_tindakan,
+      sumber_data: data.sumber_data,
+      jenis_kelamin: data.jenis_kelamin,
+      kategori_pasien: data.kategori_pasien,
+      kategori_kasus: data.kategori_kasus,
+      tb: data.tb ? Number(data.tb) : null,
+      bb: data.bb ? Number(data.bb) : null,
+      anamnesis: data.anamnesis || null,
+      pemeriksaan_fisik: data.pemeriksaan_fisik || null,
+      pemeriksaan_penunjang:
+        data.pemeriksaan_penunjang || null,
+      diagnosis: data.diagnosis,
+      diagnosis_banding:
+        data.diagnosis_banding || null,
+      farmakoterapi:
+        data.farmakoterapi || null,
+      non_farmakoterapi:
+        data.non_farmakoterapi || null,
+      monitoring_evaluasi:
+        data.monitoring_evaluasi || null,
+      status_rujukan: data.status_rujukan,
+    }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    console.error("Supabase insert error:", result);
+
+    throw new Error(
+      result?.message ||
+        result?.hint ||
+        "Gagal menyimpan data UKP ke Supabase"
+    );
+  }
+
+  return result;
+}
+
+/* =====================================================
+   TANGGAL HARI INI
+===================================================== */
+
+function getTodayJakarta(): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(new Date());
+}
+
+/* =====================================================
+   FORMAT TANGGAL UNTUK TAMPILAN
+===================================================== */
+
+function formatDateIndonesia(date: string): string {
+  const parts = date.split("-");
+
+  if (parts.length !== 3) {
+    return date;
+  }
+
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+/* =====================================================
+   MENU UTAMA
+===================================================== */
+
+async function sendMainMenu(
+  chatId: number,
+  messageId?: number
+) {
+  const body = {
     chat_id: chatId,
     text:
-      "🩺 *Logbook Internsip Kemenkes*\n\n" +
+      "🩺 <b>Logbook Internsip Kemenkes</b>\n\n" +
       "Silakan pilih jenis kegiatan yang ingin kamu input:",
-    parse_mode: "Markdown",
+    parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
         [
@@ -78,26 +194,29 @@ async function showMainMenu(chatId: number, messageId?: number) {
 
   if (messageId) {
     return telegram("editMessageText", {
-      ...payload,
+      ...body,
       message_id: messageId,
     });
   }
 
-  return telegram("sendMessage", payload);
+  return telegram("sendMessage", body);
 }
 
-// =====================================================
-// MENU UKP
-// =====================================================
+/* =====================================================
+   MENU UKP
+===================================================== */
 
-async function showUkpMenu(chatId: number, messageId: number) {
-  await telegram("editMessageText", {
+async function sendUKPMenu(
+  chatId: number,
+  messageId: number
+) {
+  return telegram("editMessageText", {
     chat_id: chatId,
     message_id: messageId,
     text:
-      "🩺 *UKP*\n\n" +
+      "🩺 <b>UKP</b>\n\n" +
       "Pilih tindakan yang ingin dilakukan:",
-    parse_mode: "Markdown",
+    parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
         [
@@ -117,37 +236,40 @@ async function showUkpMenu(chatId: number, messageId: number) {
   });
 }
 
-// =====================================================
-// MULAI INPUT UKP
-// =====================================================
+/* =====================================================
+   MULAI INPUT UKP
+===================================================== */
 
-async function startUkp(chatId: number, messageId: number) {
+async function startUKP(
+  chatId: number,
+  messageId: number
+) {
   sessions.set(chatId, {
     step: "ukp_tanggal",
     data: {},
   });
 
-  await telegram("editMessageText", {
+  return telegram("editMessageText", {
     chat_id: chatId,
     message_id: messageId,
     text:
-      "🩺 *Input UKP*\n\n" +
+      "🩺 <b>Input UKP</b>\n\n" +
       "Kita akan mengisi data UKP secara bertahap.\n\n" +
-      "📅 *Tanggal pelayanan*\n\n" +
+      "📅 <b>Tanggal pelayanan</b>\n\n" +
       "Silakan pilih:",
-    parse_mode: "Markdown",
+    parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
         [
           {
             text: "📅 Hari Ini",
-            callback_data: "ukp_tanggal_hari_ini",
+            callback_data: "ukp_date_today",
           },
         ],
         [
           {
-            text: "📝 Masukkan tanggal",
-            callback_data: "ukp_tanggal_manual",
+            text: "✏️ Masukkan Tanggal",
+            callback_data: "ukp_date_manual",
           },
         ],
         [
@@ -161,576 +283,27 @@ async function startUkp(chatId: number, messageId: number) {
   });
 }
 
-// =====================================================
-// FORMAT TANGGAL
-// =====================================================
+/* =====================================================
+   PERTANYAAN NO RM
+===================================================== */
 
-function getToday() {
-  const now = new Date();
-
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = now.getFullYear();
-
-  return `${day}/${month}/${year}`;
-}
-
-// =====================================================
-// PERTANYAAN NO RM
-// =====================================================
-
-async function askNoRm(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_no_rm";
-
-  await telegram("sendMessage", {
+async function askNoRM(
+  chatId: number,
+  messageId?: number
+) {
+  const body = {
     chat_id: chatId,
     text:
-      "✅ Tanggal pelayanan dicatat.\n\n" +
-      "🪪 *Nomor Rekam Medis*\n\n" +
-      "Masukkan No. RM pasien.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// JENIS TINDAKAN
-// =====================================================
-
-async function askJenisTindakan(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_jenis_tindakan";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🩺 *Jenis tindakan*\n\n" +
-      "Pilih jenis tindakan:",
-    parse_mode: "Markdown",
+      "🧾 <b>No. RM</b>\n\n" +
+      "Masukkan nomor rekam medis pasien.\n\n" +
+      "Jika tidak ingin mengisi, tekan <b>Lewati</b>.",
+    parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
         [
           {
-            text: "Medik",
-            callback_data: "ukp_jenis_medik",
-          },
-        ],
-        [
-          {
-            text: "Bawah",
-            callback_data: "ukp_jenis_bawah",
-          },
-        ],
-        [
-          {
-            text: "Kegawatdaruratan",
-            callback_data: "ukp_jenis_kegawatdaruratan",
-          },
-        ],
-        [
-          {
-            text: "Kejiwaan",
-            callback_data: "ukp_jenis_kejiwaan",
-          },
-        ],
-        [
-          {
-            text: "Medikolegal",
-            callback_data: "ukp_jenis_medikolegal",
-          },
-        ],
-        [
-          {
-            text: "Kebidanan-Perinatal",
-            callback_data: "ukp_jenis_kebidanan",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// SUMBER DATA
-// =====================================================
-
-async function askSumberData(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_sumber_data";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "📂 *Sumber data*\n\n" +
-      "Pilih sumber data pasien:",
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🚑 Rawat Darurat",
-            callback_data: "ukp_sumber_darurat",
-          },
-        ],
-        [
-          {
-            text: "🏥 Rawat Inap",
-            callback_data: "ukp_sumber_inap",
-          },
-        ],
-        [
-          {
-            text: "🏠 Rawat Jalan",
-            callback_data: "ukp_sumber_jalan",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// JENIS KELAMIN
-// =====================================================
-
-async function askJenisKelamin(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_jenis_kelamin";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "👤 *Jenis kelamin*\n\n" +
-      "Pilih jenis kelamin pasien:",
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "👨 Laki-laki",
-            callback_data: "ukp_kelamin_laki",
-          },
-          {
-            text: "👩 Perempuan",
-            callback_data: "ukp_kelamin_perempuan",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// KATEGORI PASIEN
-// =====================================================
-
-async function askKategoriPasien(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_kategori_pasien";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "👶 *Kategori pasien*\n\n" +
-      "Pilih kategori pasien:",
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "👶 Bayi-Anak",
-            callback_data: "ukp_pasien_bayi_anak",
-          },
-        ],
-        [
-          {
-            text: "🧑 Dewasa",
-            callback_data: "ukp_pasien_dewasa",
-          },
-        ],
-        [
-          {
-            text: "👴 Lansia",
-            callback_data: "ukp_pasien_lansia",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// KATEGORI KASUS
-// =====================================================
-
-async function askKategoriKasus(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_kategori_kasus";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🦠 *Kategori kasus*\n\n" +
-      "Pilih kategori kasus:",
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "Non-COVID",
-            callback_data: "ukp_kasus_non_covid",
-          },
-        ],
-        [
-          {
-            text: "Suspect",
-            callback_data: "ukp_kasus_suspect",
-          },
-        ],
-        [
-          {
-            text: "Probable",
-            callback_data: "ukp_kasus_probable",
-          },
-        ],
-        [
-          {
-            text: "Kontak Erat",
-            callback_data: "ukp_kasus_kontak_erat",
-          },
-        ],
-        [
-          {
-            text: "Konfirmasi",
-            callback_data: "ukp_kasus_konfirmasi",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// TB
-// =====================================================
-
-async function askTb(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_tb";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🫁 *TB*\n\n" +
-      "Apakah pasien merupakan kasus TB?",
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "Ya",
-            callback_data: "ukp_tb_ya",
-          },
-          {
-            text: "Tidak",
-            callback_data: "ukp_tb_tidak",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// BB
-// =====================================================
-
-async function askBb(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_bb";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "⚖️ *Berat Badan*\n\n" +
-      "Masukkan berat badan pasien dalam kg.\n\n" +
-      "Contoh: `55`",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// ANAMNESIS
-// =====================================================
-
-async function askAnamnesis(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_anamnesis";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "📝 *Anamnesis*\n\n" +
-      "Masukkan anamnesis pasien.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// PEMERIKSAAN FISIK
-// =====================================================
-
-async function askPemeriksaan(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_pemeriksaan";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🔬 *Pemeriksaan fisik*\n\n" +
-      "Masukkan hasil pemeriksaan fisik.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// PEMERIKSAAN PENUNJANG
-// =====================================================
-
-async function askPenunjang(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_penunjang";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🧪 *Pemeriksaan penunjang*\n\n" +
-      "Masukkan hasil pemeriksaan penunjang.\n\n" +
-      "Jika tidak ada, ketik `Tidak ada`.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// DIAGNOSIS
-// =====================================================
-
-async function askDiagnosis(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_diagnosis";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🩺 *Diagnosis*\n\n" +
-      "Masukkan diagnosis pasien.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// FARMAKOTERAPI
-// =====================================================
-
-async function askFarmakoterapi(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_farmakoterapi";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "💊 *Farmakoterapi*\n\n" +
-      "Masukkan farmakoterapi yang diberikan.\n\n" +
-      "Jika tidak ada, ketik `Tidak ada`.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// NON FARMAKOTERAPI
-// =====================================================
-
-async function askNonFarmakoterapi(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_non_farmakoterapi";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🩹 *Non-farmakoterapi*\n\n" +
-      "Masukkan tindakan non-farmakoterapi.\n\n" +
-      "Jika tidak ada, ketik `Tidak ada`.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// MONITORING & EVALUASI
-// =====================================================
-
-async function askMonitoring(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_monitoring";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "📊 *Monitoring dan evaluasi*\n\n" +
-      "Masukkan monitoring dan evaluasi pasien.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// DIAGNOSIS BANDING
-// =====================================================
-
-async function askDiagnosisBanding(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_diagnosis_banding";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🔍 *Diagnosis banding*\n\n" +
-      "Masukkan diagnosis banding.\n\n" +
-      "Jika tidak ada, ketik `Tidak ada`.",
-    parse_mode: "Markdown",
-  });
-}
-
-// =====================================================
-// STATUS RUJUKAN
-// =====================================================
-
-async function askStatusRujukan(chatId: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  session.step = "ukp_status_rujukan";
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "🏥 *Status rujukan*\n\n" +
-      "Apakah pasien dirujuk?",
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🏥 Rujuk",
-            callback_data: "ukp_rujuk",
-          },
-          {
-            text: "✅ Tidak Rujuk",
-            callback_data: "ukp_tidak_rujuk",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// TAMPILKAN REVIEW
-// =====================================================
-
-async function showUkpReview(chatId: number, messageId?: number) {
-  const session = sessions.get(chatId);
-
-  if (!session) return;
-
-  const d = session.data;
-
-  const text =
-    "📋 *REVIEW DATA UKP*\n\n" +
-    `📅 Tanggal pelayanan: ${d.tanggal || "-"}\n` +
-    `🪪 No. RM: ${d.no_rm || "-"}\n` +
-    `🩺 Jenis tindakan: ${d.jenis_tindakan || "-"}\n` +
-    `📂 Sumber data: ${d.sumber_data || "-"}\n` +
-    `👤 Jenis kelamin: ${d.jenis_kelamin || "-"}\n` +
-    `👶 Kategori pasien: ${d.kategori_pasien || "-"}\n` +
-    `🦠 Kategori kasus: ${d.kategori_kasus || "-"}\n` +
-    `🫁 TB: ${d.tb || "-"}\n` +
-    `⚖️ BB: ${d.bb || "-"} kg\n\n` +
-    `📝 Anamnesis:\n${d.anamnesis || "-"}\n\n` +
-    `🔬 Pemeriksaan fisik:\n${d.pemeriksaan || "-"}\n\n` +
-    `🧪 Pemeriksaan penunjang:\n${d.penunjang || "-"}\n\n` +
-    `🩺 Diagnosis:\n${d.diagnosis || "-"}\n\n` +
-    `💊 Farmakoterapi:\n${d.farmakoterapi || "-"}\n\n` +
-    `🩹 Non-farmakoterapi:\n${d.non_farmakoterapi || "-"}\n\n` +
-    `📊 Monitoring & evaluasi:\n${d.monitoring || "-"}\n\n` +
-    `🔍 Diagnosis banding:\n${d.diagnosis_banding || "-"}\n\n` +
-    `🏥 Status rujukan: ${d.status_rujukan || "-"}\n\n` +
-    "────────────────────\n" +
-    "Apakah semua data sudah benar?";
-
-  const payload = {
-    chat_id: chatId,
-    text,
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "💾 Simpan ke Logbook",
-            callback_data: "ukp_save",
-          },
-        ],
-        [
-          {
-            text: "🔄 Input Ulang",
-            callback_data: "ukp_input",
+            text: "⏭️ Lewati",
+            callback_data: "ukp_no_rm_skip",
           },
         ],
         [
@@ -744,545 +317,1379 @@ async function showUkpReview(chatId: number, messageId?: number) {
   };
 
   if (messageId) {
-    await telegram("editMessageText", {
-      ...payload,
+    return telegram("editMessageText", {
+      ...body,
       message_id: messageId,
     });
-  } else {
-    await telegram("sendMessage", payload);
   }
+
+  return telegram("sendMessage", body);
 }
 
-// =====================================================
-// HANDLE CALLBACK
-// =====================================================
+/* =====================================================
+   JENIS TINDAKAN
+===================================================== */
 
-async function handleCallback(update: any) {
-  const callback = update.callback_query;
-
-  const callbackId = callback.id;
-  const data = callback.data;
-
-  const chatId = callback.message?.chat?.id;
-  const messageId = callback.message?.message_id;
-
-  await telegram("answerCallbackQuery", {
-    callback_query_id: callbackId,
+async function askJenisTindakan(
+  chatId: number
+) {
+  return telegram("sendMessage", {
+    chat_id: chatId,
+    text:
+      "🩺 <b>Jenis tindakan</b>\n\n" +
+      "Pilih jenis tindakan:",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "Medik",
+            callback_data: "ukp_action_medik",
+          },
+          {
+            text: "Bedah",
+            callback_data: "ukp_action_bedah",
+          },
+        ],
+        [
+          {
+            text: "Kegawatdaruratan",
+            callback_data: "ukp_action_emergency",
+          },
+        ],
+        [
+          {
+            text: "Kejiwaan",
+            callback_data: "ukp_action_psychiatry",
+          },
+        ],
+        [
+          {
+            text: "Medikolegal",
+            callback_data: "ukp_action_medikolegal",
+          },
+        ],
+        [
+          {
+            text: "Kebidanan-Perinatal",
+            callback_data: "ukp_action_obgyn",
+          },
+        ],
+      ],
+    },
   });
-
-  if (!chatId || !messageId) {
-    return;
-  }
-
-  // ===================================================
-  // MENU UTAMA
-  // ===================================================
-
-  if (data === "menu_start") {
-    sessions.delete(chatId);
-
-    await showMainMenu(chatId, messageId);
-
-    return;
-  }
-
-  // ===================================================
-  // UKP
-  // ===================================================
-
-  if (data === "menu_ukp") {
-    await showUkpMenu(chatId, messageId);
-
-    return;
-  }
-
-  // ===================================================
-  // INPUT UKP
-  // ===================================================
-
-  if (data === "ukp_input") {
-    await startUkp(chatId, messageId);
-
-    return;
-  }
-
-  // ===================================================
-  // TANGGAL HARI INI
-  // ===================================================
-
-  if (data === "ukp_tanggal_hari_ini") {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.tanggal = getToday();
-
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        `📅 *Tanggal pelayanan:* ${session.data.tanggal}\n\n` +
-        "Tanggal hari ini dipilih.",
-      parse_mode: "Markdown",
-    });
-
-    await askNoRm(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // TANGGAL MANUAL
-  // ===================================================
-
-  if (data === "ukp_tanggal_manual") {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.step = "ukp_tanggal_manual";
-
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        "📅 *Tanggal pelayanan*\n\n" +
-        "Masukkan tanggal pelayanan.\n\n" +
-        "Format:\n" +
-        "`07/10/2026`",
-      parse_mode: "Markdown",
-    });
-
-    return;
-  }
-
-  // ===================================================
-  // JENIS TINDAKAN
-  // ===================================================
-
-  const jenisTindakan: Record<string, string> = {
-    ukp_jenis_medik: "Medik",
-    ukp_jenis_bawah: "Bawah",
-    ukp_jenis_kegawatdaruratan: "Kegawatdaruratan",
-    ukp_jenis_kejiwaan: "Kejiwaan",
-    ukp_jenis_medikolegal: "Medikolegal",
-    ukp_jenis_kebidanan: "Kebidanan-Perinatal",
-  };
-
-  if (jenisTindakan[data]) {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.jenis_tindakan = jenisTindakan[data];
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: `✅ Jenis tindakan: *${jenisTindakan[data]}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askSumberData(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // SUMBER DATA
-  // ===================================================
-
-  const sumberData: Record<string, string> = {
-    ukp_sumber_darurat: "Rawat Darurat",
-    ukp_sumber_inap: "Rawat Inap",
-    ukp_sumber_jalan: "Rawat Jalan",
-  };
-
-  if (sumberData[data]) {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.sumber_data = sumberData[data];
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: `✅ Sumber data: *${sumberData[data]}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askJenisKelamin(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // JENIS KELAMIN
-  // ===================================================
-
-  const jenisKelamin: Record<string, string> = {
-    ukp_kelamin_laki: "Laki-laki",
-    ukp_kelamin_perempuan: "Perempuan",
-  };
-
-  if (jenisKelamin[data]) {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.jenis_kelamin = jenisKelamin[data];
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: `✅ Jenis kelamin: *${jenisKelamin[data]}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askKategoriPasien(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // KATEGORI PASIEN
-  // ===================================================
-
-  const kategoriPasien: Record<string, string> = {
-    ukp_pasien_bayi_anak: "Bayi-Anak",
-    ukp_pasien_dewasa: "Dewasa",
-    ukp_pasien_lansia: "Lansia",
-  };
-
-  if (kategoriPasien[data]) {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.kategori_pasien = kategoriPasien[data];
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: `✅ Kategori pasien: *${kategoriPasien[data]}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askKategoriKasus(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // KATEGORI KASUS
-  // ===================================================
-
-  const kategoriKasus: Record<string, string> = {
-    ukp_kasus_non_covid: "Non-COVID",
-    ukp_kasus_suspect: "Suspect",
-    ukp_kasus_probable: "Probable",
-    ukp_kasus_kontak_erat: "Kontak Erat",
-    ukp_kasus_konfirmasi: "Konfirmasi",
-  };
-
-  if (kategoriKasus[data]) {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.kategori_kasus = kategoriKasus[data];
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: `✅ Kategori kasus: *${kategoriKasus[data]}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askTb(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // TB
-  // ===================================================
-
-  if (data === "ukp_tb_ya" || data === "ukp_tb_tidak") {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.tb = data === "ukp_tb_ya" ? "Ya" : "Tidak";
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: `✅ TB: *${session.data.tb}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askBb(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // STATUS RUJUKAN
-  // ===================================================
-
-  if (data === "ukp_rujuk" || data === "ukp_tidak_rujuk") {
-    const session = sessions.get(chatId);
-
-    if (!session) return;
-
-    session.data.status_rujukan =
-      data === "ukp_rujuk" ? "Rujuk" : "Tidak Rujuk";
-
-    await showUkpReview(chatId);
-
-    session.step = "ukp_konfirmasi";
-
-    return;
-  }
-
-  // ===================================================
-  // SIMPAN UKP
-  // ===================================================
-
-  if (data === "ukp_save") {
-    const session = sessions.get(chatId);
-
-    if (!session) {
-      await telegram("sendMessage", {
-        chat_id: chatId,
-        text:
-          "⚠️ Data UKP sudah tidak ditemukan.\n\n" +
-          "Silakan mulai input UKP dari awal.",
-      });
-
-      return;
-    }
-
-    console.log("=================================");
-    console.log("MENYIMPAN DATA UKP");
-    console.log(session.data);
-    console.log("=================================");
-
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        "✅ *DATA UKP BERHASIL DITERIMA*\n\n" +
-        "Data sudah melewati tahap review.\n\n" +
-        "📋 Data UKP:\n" +
-        `📅 ${session.data.tanggal}\n` +
-        `🪪 No. RM: ${session.data.no_rm}\n` +
-        `🩺 Jenis tindakan: ${session.data.jenis_tindakan}\n` +
-        `📂 Sumber data: ${session.data.sumber_data}\n` +
-        `👤 Jenis kelamin: ${session.data.jenis_kelamin}\n` +
-        `👶 Kategori pasien: ${session.data.kategori_pasien}\n` +
-        `🦠 Kategori kasus: ${session.data.kategori_kasus}\n` +
-        `🫁 TB: ${session.data.tb}\n` +
-        `⚖️ BB: ${session.data.bb} kg\n\n` +
-        "🎉 *Tahap penyimpanan bot berhasil.*\n\n" +
-        "Selanjutnya data ini akan kita hubungkan langsung ke Supabase.",
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "➕ Input UKP Baru",
-              callback_data: "ukp_input",
-            },
-          ],
-          [
-            {
-              text: "🏠 Menu Utama",
-              callback_data: "menu_start",
-            },
-          ],
-        ],
-      },
-    });
-
-    // Untuk sementara hapus session setelah berhasil disimpan
-    sessions.delete(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // UKM
-  // ===================================================
-
-  if (data === "menu_ukm") {
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        "🌱 *UKM*\n\n" +
-        "Pilih jenis kegiatan UKM:",
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "🏠 Kesling",
-              callback_data: "ukm_kesling",
-            },
-          ],
-          [
-            {
-              text: "📢 Promkes",
-              callback_data: "ukm_promkes",
-            },
-          ],
-          [
-            {
-              text: "👨‍👩‍👧 Kesehatan Keluarga",
-              callback_data: "ukm_keluarga",
-            },
-          ],
-          [
-            {
-              text: "🍎 Pelayanan Gizi",
-              callback_data: "ukm_gizi",
-            },
-          ],
-          [
-            {
-              text: "🦠 P2P",
-              callback_data: "ukm_p2p",
-            },
-          ],
-          [
-            {
-              text: "⬅️ Kembali",
-              callback_data: "menu_start",
-            },
-          ],
-        ],
-      },
-    });
-
-    return;
-  }
-
-  // ===================================================
-  // UKM CATEGORY
-  // ===================================================
-
-  const ukmCategories: Record<string, string> = {
-    ukm_kesling: "🏠 Kesehatan Lingkungan (Kesling)",
-    ukm_promkes: "📢 Promosi Kesehatan (Promkes)",
-    ukm_keluarga: "👨‍👩‍👧 Kesehatan Keluarga",
-    ukm_gizi: "🍎 Pelayanan Gizi",
-    ukm_p2p: "🦠 Pencegahan dan Pengendalian Penyakit (P2P)",
-  };
-
-  if (ukmCategories[data]) {
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        `*${ukmCategories[data]}*\n\n` +
-        "Alur UKM akan kita buat setelah alur UKP selesai.",
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "⬅️ Kembali",
-              callback_data: "menu_ukm",
-            },
-          ],
-        ],
-      },
-    });
-
-    return;
-  }
-
-  // ===================================================
-  // TINDAKAN MEDIS
-  // ===================================================
-
-  if (data === "menu_tindakan") {
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        "💉 *Tindakan Medis*\n\n" +
-        "Fitur ini akan kita buat setelah UKP selesai.",
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "⬅️ Kembali",
-              callback_data: "menu_start",
-            },
-          ],
-        ],
-      },
-    });
-
-    return;
-  }
-
-  // ===================================================
-  // MINI PROJECT
-  // ===================================================
-
-  if (data === "menu_miniproject") {
-    await telegram("editMessageText", {
-      chat_id: chatId,
-      message_id: messageId,
-      text:
-        "📋 *Mini Project*\n\n" +
-        "Fitur Mini Project akan kita buat setelah alur utama selesai.",
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "⬅️ Kembali",
-              callback_data: "menu_start",
-            },
-          ],
-        ],
-      },
-    });
-
-    return;
-  }
 }
 
-// =====================================================
-// HANDLE MESSAGE
-// =====================================================
+/* =====================================================
+   SUMBER DATA
+===================================================== */
 
-async function handleMessage(update: any) {
-  const message = update.message;
+async function askSumberData(chatId: number) {
+  return telegram("sendMessage", {
+    chat_id: chatId,
+    text:
+      "📂 <b>Sumber data</b>\n\n" +
+      "Pilih sumber data pasien:",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "🚑 Rawat Darurat",
+            callback_data: "ukp_source_emergency",
+          },
+        ],
+        [
+          {
+            text: "🏥 Rawat Inap",
+            callback_data: "ukp_source_inpatient",
+          },
+        ],
+        [
+          {
+            text: "🏠 Rawat Jalan",
+            callback_data: "ukp_source_outpatient",
+          },
+        ],
+      ],
+    },
+  });
+}
 
-  if (!message?.chat?.id) {
-    return;
-  }
+/* =====================================================
+   JENIS KELAMIN
+===================================================== */
 
-  const chatId = message.chat.id;
-  const text = message.text?.trim() || "";
+async function askJenisKelamin(chatId: number) {
+  return telegram("sendMessage", {
+    chat_id: chatId,
+    text:
+      "👤 <b>Jenis kelamin</b>\n\n" +
+      "Pilih jenis kelamin pasien:",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "👨 Laki-laki",
+            callback_data: "ukp_gender_male",
+          },
+          {
+            text: "👩 Perempuan",
+            callback_data: "ukp_gender_female",
+          },
+        ],
+      ],
+    },
+  });
+}
 
-  // ===================================================
-  // /START
-  // ===================================================
+/* =====================================================
+   KATEGORI PASIEN
+===================================================== */
 
-  if (text === "/start") {
-    sessions.delete(chatId);
+async function askKategoriPasien(chatId: number) {
+  return telegram("sendMessage", {
+    chat_id: chatId,
+    text:
+      "👶 <b>Kategori pasien</b>\n\n" +
+      "Pilih kategori pasien:",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "👶 Bayi-Anak",
+            callback_data: "ukp_patient_child",
+          },
+        ],
+        [
+          {
+            text: "🧑 Dewasa",
+            callback_data: "ukp_patient_adult",
+          },
+        ],
+        [
+          {
+            text: "👴 Lansia",
+            callback_data: "ukp_patient_elderly",
+          },
+        ],
+      ],
+    },
+  });
+}
 
-    await showMainMenu(chatId);
+/* =====================================================
+   KATEGORI KASUS
+===================================================== */
 
-    return;
-  }
+async function askKategoriKasus(chatId: number) {
+  return telegram("sendMessage", {
+    chat_id: chatId,
+    text:
+      "🦠 <b>Kategori kasus</b>\n\n" +
+      "Pilih kategori kasus:",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "Non-COVID",
+            callback_data: "ukp_case_non_covid",
+          },
+        ],
+        [
+          {
+            text: "Suspect",
+            callback_data: "ukp_case_suspect",
+          },
+          {
+            text: "Probable",
+            callback_data: "ukp_case_probable",
+          },
+        ],
+        [
+          {
+            text: "Kontak Erat",
+            callback_data: "ukp_case_close_contact",
+          },
+        ],
+        [
+          {
+            text: "Konfirmasi",
+            callback_data: "ukp_case_confirmed",
+          },
+        ],
+      ],
+    },
+  });
+}
 
+/* =====================================================
+   STATUS RUJUKAN
+===================================================== */
+
+async function askStatusRujukan(chatId: number) {
+  return telegram("sendMessage", {
+    chat_id: chatId,
+    text:
+      "🚑 <b>Status rujukan</b>\n\n" +
+      "Apakah pasien dirujuk?",
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "🚑 Rujuk",
+            callback_data: "ukp_referral_yes",
+          },
+          {
+            text: "🏠 Tidak Rujuk",
+            callback_data: "ukp_referral_no",
+          },
+        ],
+      ],
+    },
+  });
+}
+
+/* =====================================================
+   REVIEW DATA
+===================================================== */
+
+async function showUKPReview(
+  chatId: number,
+  messageId?: number
+) {
   const session = sessions.get(chatId);
 
   if (!session) {
+    return telegram("sendMessage", {
+      chat_id: chatId,
+      text:
+        "⚠️ Data UKP tidak ditemukan.\n\n" +
+        "Silakan mulai input UKP dari awal.",
+    });
+  }
+
+  const d = session.data;
+
+  const text =
+    "📋 <b>REVIEW DATA UKP</b>\n\n" +
+    `📅 <b>Tanggal pelayanan:</b> ${formatDateIndonesia(
+      d.tanggal_pelayanan
+    )}\n` +
+    `🧾 <b>No. RM:</b> ${d.no_rm || "-"}\n` +
+    `🩺 <b>Jenis tindakan:</b> ${d.jenis_tindakan}\n` +
+    `📂 <b>Sumber data:</b> ${d.sumber_data}\n` +
+    `👤 <b>Jenis kelamin:</b> ${d.jenis_kelamin}\n` +
+    `👶 <b>Kategori pasien:</b> ${d.kategori_pasien}\n` +
+    `🦠 <b>Kategori kasus:</b> ${d.kategori_kasus}\n` +
+    `📏 <b>TB:</b> ${d.tb || "-"} cm\n` +
+    `⚖️ <b>BB:</b> ${d.bb || "-"} kg\n\n` +
+    `📝 <b>Anamnesis:</b>\n${d.anamnesis || "-"}\n\n` +
+    `🔬 <b>Pemeriksaan fisik:</b>\n${
+      d.pemeriksaan_fisik || "-"
+    }\n\n` +
+    `🧪 <b>Pemeriksaan penunjang:</b>\n${
+      d.pemeriksaan_penunjang || "-"
+    }\n\n` +
+    `🩺 <b>Diagnosis:</b>\n${d.diagnosis || "-"}\n\n` +
+    `💊 <b>Farmakoterapi:</b>\n${
+      d.farmakoterapi || "-"
+    }\n\n` +
+    `🩹 <b>Non-farmakoterapi:</b>\n${
+      d.non_farmakoterapi || "-"
+    }\n\n` +
+    `📊 <b>Monitoring & evaluasi:</b>\n${
+      d.monitoring_evaluasi || "-"
+    }\n\n` +
+    `🔍 <b>Diagnosis banding:</b>\n${
+      d.diagnosis_banding || "-"
+    }\n\n` +
+    `🚑 <b>Status rujukan:</b> ${
+      d.status_rujukan || "-"
+    }\n\n` +
+    "Jika semua data sudah benar, tekan tombol <b>Simpan ke Logbook</b>.";
+
+  const body = {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "💾 Simpan ke Logbook",
+            callback_data: "ukp_save",
+          },
+        ],
+        [
+          {
+            text: "❌ Batalkan",
+            callback_data: "menu_start",
+          },
+        ],
+      ],
+    },
+  };
+
+  if (messageId) {
+    return telegram("editMessageText", {
+      ...body,
+      message_id: messageId,
+    });
+  }
+
+  return telegram("sendMessage", body);
+}
+
+/* =====================================================
+   POST WEBHOOK
+===================================================== */
+
+export async function POST(request: Request) {
+  try {
+    const update = await request.json();
+
+    console.log("Telegram update:", update);
+
+    /* =================================================
+       CALLBACK QUERY
+    ================================================= */
+
+    if (update.callback_query) {
+      const callback = update.callback_query;
+
+      const callbackId = callback.id;
+      const callbackData = callback.data;
+      const callbackChatId =
+        callback.message?.chat?.id;
+      const callbackMessageId =
+        callback.message?.message_id;
+
+      await telegram("answerCallbackQuery", {
+        callback_query_id: callbackId,
+      });
+
+      if (
+        !callbackChatId ||
+        !callbackMessageId
+      ) {
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         MENU UTAMA
+      =============================================== */
+
+      if (callbackData === "menu_start") {
+        sessions.delete(callbackChatId);
+
+        await sendMainMenu(
+          callbackChatId,
+          callbackMessageId
+        );
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         MENU UKP
+      =============================================== */
+
+      if (callbackData === "menu_ukp") {
+        await sendUKPMenu(
+          callbackChatId,
+          callbackMessageId
+        );
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         INPUT UKP
+      =============================================== */
+
+      if (callbackData === "ukp_input") {
+        await startUKP(
+          callbackChatId,
+          callbackMessageId
+        );
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         TANGGAL HARI INI
+      =============================================== */
+
+      if (callbackData === "ukp_date_today") {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          await sendMainMenu(
+            callbackChatId,
+            callbackMessageId
+          );
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.tanggal_pelayanan =
+          getTodayJakarta();
+
+        session.step = "ukp_no_rm";
+
+        await askNoRM(
+          callbackChatId,
+          callbackMessageId
+        );
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         TANGGAL MANUAL
+      =============================================== */
+
+      if (callbackData === "ukp_date_manual") {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          await sendMainMenu(
+            callbackChatId,
+            callbackMessageId
+          );
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.step = "ukp_tanggal_manual";
+
+        await telegram("editMessageText", {
+          chat_id: callbackChatId,
+          message_id: callbackMessageId,
+          text:
+            "📅 <b>Tanggal pelayanan</b>\n\n" +
+            "Ketik tanggal pelayanan dengan format:\n\n" +
+            "<code>07/10/2026</code>",
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "❌ Batalkan",
+                  callback_data: "menu_start",
+                },
+              ],
+            ],
+          },
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         NO RM SKIP
+      =============================================== */
+
+      if (callbackData === "ukp_no_rm_skip") {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.no_rm = "";
+        session.step = "ukp_jenis_tindakan";
+
+        await askJenisTindakan(callbackChatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         JENIS TINDAKAN
+      =============================================== */
+
+      const actionMap: Record<string, string> = {
+        ukp_action_medik: "Medik",
+        ukp_action_bedah: "Bedah",
+        ukp_action_emergency: "Kegawatdaruratan",
+        ukp_action_psychiatry: "Kejiwaan",
+        ukp_action_medikolegal: "Medikolegal",
+        ukp_action_obgyn: "Kebidanan-Perinatal",
+      };
+
+      if (actionMap[callbackData]) {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.jenis_tindakan =
+          actionMap[callbackData];
+
+        session.step = "ukp_sumber_data";
+
+        await askSumberData(callbackChatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         SUMBER DATA
+      =============================================== */
+
+      const sourceMap: Record<string, string> = {
+        ukp_source_emergency: "Rawat Darurat",
+        ukp_source_inpatient: "Rawat Inap",
+        ukp_source_outpatient: "Rawat Jalan",
+      };
+
+      if (sourceMap[callbackData]) {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.sumber_data =
+          sourceMap[callbackData];
+
+        session.step = "ukp_jenis_kelamin";
+
+        await askJenisKelamin(callbackChatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         JENIS KELAMIN
+      =============================================== */
+
+      const genderMap: Record<string, string> = {
+        ukp_gender_male: "Laki-laki",
+        ukp_gender_female: "Perempuan",
+      };
+
+      if (genderMap[callbackData]) {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.jenis_kelamin =
+          genderMap[callbackData];
+
+        session.step = "ukp_kategori_pasien";
+
+        await askKategoriPasien(callbackChatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         KATEGORI PASIEN
+      =============================================== */
+
+      const patientMap: Record<string, string> = {
+        ukp_patient_child: "Bayi-Anak",
+        ukp_patient_adult: "Dewasa",
+        ukp_patient_elderly: "Lansia",
+      };
+
+      if (patientMap[callbackData]) {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.kategori_pasien =
+          patientMap[callbackData];
+
+        session.step = "ukp_kategori_kasus";
+
+        await askKategoriKasus(callbackChatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         KATEGORI KASUS
+      =============================================== */
+
+      const caseMap: Record<string, string> = {
+        ukp_case_non_covid: "Non-COVID",
+        ukp_case_suspect: "Suspect",
+        ukp_case_probable: "Probable",
+        ukp_case_close_contact: "Kontak Erat",
+        ukp_case_confirmed: "Konfirmasi",
+      };
+
+      if (caseMap[callbackData]) {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.kategori_kasus =
+          caseMap[callbackData];
+
+        session.step = "ukp_tb";
+
+        await telegram("sendMessage", {
+          chat_id: callbackChatId,
+          text:
+            "📏 <b>Tinggi badan (TB)</b>\n\n" +
+            "Masukkan TB pasien dalam cm.\n\n" +
+            "Contoh: <code>165</code>",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         STATUS RUJUKAN
+      =============================================== */
+
+      const referralMap: Record<string, string> = {
+        ukp_referral_yes: "Rujuk",
+        ukp_referral_no: "Tidak Rujuk",
+      };
+
+      if (referralMap[callbackData]) {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.status_rujukan =
+          referralMap[callbackData];
+
+        session.step = "ukp_review";
+
+        await showUKPReview(
+          callbackChatId
+        );
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         SIMPAN UKP
+      =============================================== */
+
+      if (callbackData === "ukp_save") {
+        const session =
+          sessions.get(callbackChatId);
+
+        if (!session) {
+          await telegram("sendMessage", {
+            chat_id: callbackChatId,
+            text:
+              "⚠️ <b>Data UKP tidak ditemukan.</b>\n\n" +
+              "Silakan mulai input UKP dari awal.",
+            parse_mode: "HTML",
+          });
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        try {
+          await saveUKPToSupabase(
+            session.data
+          );
+
+          console.log(
+            "UKP BERHASIL DISIMPAN:",
+            session.data
+          );
+
+          sessions.delete(callbackChatId);
+
+          await telegram("editMessageText", {
+            chat_id: callbackChatId,
+            message_id: callbackMessageId,
+            text:
+              "✅ <b>Data UKP berhasil disimpan ke Logbook!</b>\n\n" +
+              "Data sudah masuk ke database.\n\n" +
+              "Silakan pilih tindakan berikutnya:",
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "➕ Input UKP Baru",
+                    callback_data: "ukp_input",
+                  },
+                ],
+                [
+                  {
+                    text: "🏠 Menu Utama",
+                    callback_data: "menu_start",
+                  },
+                ],
+              ],
+            },
+          });
+        } catch (saveError) {
+          console.error(
+            "Gagal menyimpan UKP:",
+            saveError
+          );
+
+          await telegram("editMessageText", {
+            chat_id: callbackChatId,
+            message_id: callbackMessageId,
+            text:
+              "❌ <b>Data belum berhasil disimpan.</b>\n\n" +
+              "Terjadi masalah saat menyimpan ke database.\n\n" +
+              "Data kamu masih ada di sesi bot. Jangan mulai ulang dulu.",
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "🔄 Coba Simpan Lagi",
+                    callback_data: "ukp_save",
+                  },
+                ],
+                [
+                  {
+                    text: "🏠 Menu Utama",
+                    callback_data: "menu_start",
+                  },
+                ],
+              ],
+            },
+          });
+        }
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         MENU LAIN
+      =============================================== */
+
+      if (callbackData === "menu_ukm") {
+        await telegram("editMessageText", {
+          chat_id: callbackChatId,
+          message_id: callbackMessageId,
+          text:
+            "🌱 <b>UKM</b>\n\n" +
+            "Fitur UKM akan kita lanjutkan setelah alur UKP selesai.",
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "⬅️ Kembali",
+                  callback_data: "menu_start",
+                },
+              ],
+            ],
+          },
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      if (callbackData === "menu_tindakan") {
+        await telegram("editMessageText", {
+          chat_id: callbackChatId,
+          message_id: callbackMessageId,
+          text:
+            "💉 <b>Tindakan Medis</b>\n\n" +
+            "Fitur ini akan kita lanjutkan setelah UKP.",
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "⬅️ Kembali",
+                  callback_data: "menu_start",
+                },
+              ],
+            ],
+          },
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      if (callbackData === "menu_miniproject") {
+        await telegram("editMessageText", {
+          chat_id: callbackChatId,
+          message_id: callbackMessageId,
+          text:
+            "📋 <b>Mini Project</b>\n\n" +
+            "Fitur ini akan kita lanjutkan setelah UKP.",
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "⬅️ Kembali",
+                  callback_data: "menu_start",
+                },
+              ],
+            ],
+          },
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      return NextResponse.json({
+        ok: true,
+      });
+    }
+
+    /* =================================================
+       PESAN BIASA
+    ================================================= */
+
+    const incomingMessage = update.message;
+
+    if (!incomingMessage?.chat?.id) {
+      return NextResponse.json({
+        ok: true,
+      });
+    }
+
+    const chatId = incomingMessage.chat.id;
+    const text =
+      incomingMessage.text?.trim() || "";
+
+    /* =================================================
+       /START
+    ================================================= */
+
+    if (text === "/start") {
+      sessions.delete(chatId);
+
+      await sendMainMenu(chatId);
+
+      return NextResponse.json({
+        ok: true,
+      });
+    }
+
+    /* =================================================
+       SESSION
+    ================================================= */
+
+    const session = sessions.get(chatId);
+
+    if (session) {
+      /* ===============================================
+         TANGGAL MANUAL
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_tanggal_manual"
+      ) {
+        const match = text.match(
+          /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+        );
+
+        if (!match) {
+          await telegram("sendMessage", {
+            chat_id: chatId,
+            text:
+              "❌ Format tanggal tidak sesuai.\n\n" +
+              "Gunakan format:\n" +
+              "<code>07/10/2026</code>",
+            parse_mode: "HTML",
+          });
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        const day = Number(match[1]);
+        const month = Number(match[2]);
+        const year = Number(match[3]);
+
+        const date = new Date(
+          Date.UTC(year, month - 1, day)
+        );
+
+        if (
+          date.getUTCFullYear() !== year ||
+          date.getUTCMonth() !== month - 1 ||
+          date.getUTCDate() !== day
+        ) {
+          await telegram("sendMessage", {
+            chat_id: chatId,
+            text:
+              "❌ Tanggal tidak valid.\n\n" +
+              "Silakan masukkan tanggal yang benar.",
+            parse_mode: "HTML",
+          });
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.tanggal_pelayanan =
+          `${year}-${String(month).padStart(
+            2,
+            "0"
+          )}-${String(day).padStart(2, "0")}`;
+
+        session.step = "ukp_no_rm";
+
+        await askNoRM(chatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         NO RM
+      =============================================== */
+
+      if (session.step === "ukp_no_rm") {
+        session.data.no_rm = text;
+
+        session.step =
+          "ukp_jenis_tindakan";
+
+        await askJenisTindakan(chatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         TB
+      =============================================== */
+
+      if (session.step === "ukp_tb") {
+        const tb = Number(
+          text.replace(",", ".")
+        );
+
+        if (
+          !Number.isFinite(tb) ||
+          tb <= 0 ||
+          tb > 300
+        ) {
+          await telegram("sendMessage", {
+            chat_id: chatId,
+            text:
+              "❌ TB tidak valid.\n\n" +
+              "Masukkan TB dalam cm.\n" +
+              "Contoh: <code>165</code>",
+            parse_mode: "HTML",
+          });
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.tb = String(tb);
+        session.step = "ukp_bb";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "⚖️ <b>Berat badan (BB)</b>\n\n" +
+            "Masukkan BB pasien dalam kg.\n\n" +
+            "Contoh: <code>55.5</code>",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         BB
+      =============================================== */
+
+      if (session.step === "ukp_bb") {
+        const bb = Number(
+          text.replace(",", ".")
+        );
+
+        if (
+          !Number.isFinite(bb) ||
+          bb <= 0 ||
+          bb > 500
+        ) {
+          await telegram("sendMessage", {
+            chat_id: chatId,
+            text:
+              "❌ BB tidak valid.\n\n" +
+              "Masukkan BB dalam kg.\n" +
+              "Contoh: <code>55.5</code>",
+            parse_mode: "HTML",
+          });
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.bb = String(bb);
+        session.step = "ukp_anamnesis";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "📝 <b>Anamnesis</b>\n\n" +
+            "Masukkan anamnesis pasien secara lengkap.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         ANAMNESIS
+      =============================================== */
+
+      if (session.step === "ukp_anamnesis") {
+        session.data.anamnesis = text;
+        session.step =
+          "ukp_pemeriksaan_fisik";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "🔬 <b>Pemeriksaan fisik</b>\n\n" +
+            "Masukkan hasil pemeriksaan fisik.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         PEMERIKSAAN FISIK
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_pemeriksaan_fisik"
+      ) {
+        session.data.pemeriksaan_fisik =
+          text;
+
+        session.step =
+          "ukp_pemeriksaan_penunjang";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "🧪 <b>Pemeriksaan penunjang</b>\n\n" +
+            "Masukkan hasil pemeriksaan penunjang.\n\n" +
+            "Jika tidak ada, ketik <code>Tidak ada</code>.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         PEMERIKSAAN PENUNJANG
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_pemeriksaan_penunjang"
+      ) {
+        session.data.pemeriksaan_penunjang =
+          text;
+
+        session.step = "ukp_diagnosis";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "🩺 <b>Diagnosis</b>\n\n" +
+            "Masukkan diagnosis utama pasien.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         DIAGNOSIS
+      =============================================== */
+
+      if (session.step === "ukp_diagnosis") {
+        if (!text) {
+          await telegram("sendMessage", {
+            chat_id: chatId,
+            text:
+              "⚠️ Diagnosis wajib diisi.\n\n" +
+              "Silakan masukkan diagnosis pasien.",
+          });
+
+          return NextResponse.json({
+            ok: true,
+          });
+        }
+
+        session.data.diagnosis = text;
+        session.step =
+          "ukp_farmakoterapi";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "💊 <b>Farmakoterapi</b>\n\n" +
+            "Masukkan farmakoterapi yang diberikan.\n\n" +
+            "Jika tidak ada, ketik <code>Tidak ada</code>.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         FARMAKOTERAPI
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_farmakoterapi"
+      ) {
+        session.data.farmakoterapi =
+          text;
+
+        session.step =
+          "ukp_non_farmakoterapi";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "🩹 <b>Non-farmakoterapi</b>\n\n" +
+            "Masukkan tatalaksana non-farmakoterapi.\n\n" +
+            "Jika tidak ada, ketik <code>Tidak ada</code>.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         NON FARMAKOTERAPI
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_non_farmakoterapi"
+      ) {
+        session.data.non_farmakoterapi =
+          text;
+
+        session.step =
+          "ukp_monitoring_evaluasi";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "📊 <b>Monitoring & Evaluasi</b>\n\n" +
+            "Masukkan monitoring dan evaluasi pasien.\n\n" +
+            "Jika belum ada, ketik <code>Tidak ada</code>.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         MONITORING EVALUASI
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_monitoring_evaluasi"
+      ) {
+        session.data.monitoring_evaluasi =
+          text;
+
+        session.step =
+          "ukp_diagnosis_banding";
+
+        await telegram("sendMessage", {
+          chat_id: chatId,
+          text:
+            "🔍 <b>Diagnosis Banding</b>\n\n" +
+            "Masukkan diagnosis banding.\n\n" +
+            "Jika tidak ada, ketik <code>Tidak ada</code>.",
+          parse_mode: "HTML",
+        });
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         DIAGNOSIS BANDING
+      =============================================== */
+
+      if (
+        session.step ===
+        "ukp_diagnosis_banding"
+      ) {
+        session.data.diagnosis_banding =
+          text;
+
+        session.step =
+          "ukp_status_rujukan";
+
+        await askStatusRujukan(chatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         REVIEW
+      =============================================== */
+
+      if (session.step === "ukp_review") {
+        await showUKPReview(chatId);
+
+        return NextResponse.json({
+          ok: true,
+        });
+      }
+
+      /* ===============================================
+         SESSION TIDAK DIKENALI
+      =============================================== */
+
+      sessions.delete(chatId);
+
+      await telegram("sendMessage", {
+        chat_id: chatId,
+        text:
+          "⚠️ Sesi input tidak dikenali.\n\n" +
+          "Silakan mulai kembali dari menu utama.",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "🏠 Menu Utama",
+                callback_data: "menu_start",
+              },
+            ],
+          ],
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+      });
+    }
+
+    /* =================================================
+       PESAN LAIN
+    ================================================= */
+
     await telegram("sendMessage", {
       chat_id: chatId,
       text:
@@ -1300,264 +1707,14 @@ async function handleMessage(update: any) {
       },
     });
 
-    return;
-  }
-
-  // ===================================================
-  // TANGGAL MANUAL
-  // ===================================================
-
-  if (session.step === "ukp_tanggal_manual") {
-    session.data.tanggal = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text:
-        `✅ Tanggal pelayanan: *${text}*\n\n` +
-        "🪪 *Nomor Rekam Medis*\n\n" +
-        "Masukkan No. RM pasien.",
-      parse_mode: "Markdown",
-    });
-
-    session.step = "ukp_no_rm";
-
-    return;
-  }
-
-  // ===================================================
-  // NO RM
-  // ===================================================
-
-  if (session.step === "ukp_no_rm") {
-    session.data.no_rm = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text:
-        `✅ No. RM: *${text}*`,
-      parse_mode: "Markdown",
-    });
-
-    await askJenisTindakan(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // BB
-  // ===================================================
-
-  if (session.step === "ukp_bb") {
-    session.data.bb = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text:
-        `✅ Berat badan: *${text} kg*`,
-      parse_mode: "Markdown",
-    });
-
-    await askAnamnesis(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // ANAMNESIS
-  // ===================================================
-
-  if (session.step === "ukp_anamnesis") {
-    session.data.anamnesis = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Anamnesis dicatat.",
-    });
-
-    await askPemeriksaan(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // PEMERIKSAAN FISIK
-  // ===================================================
-
-  if (session.step === "ukp_pemeriksaan") {
-    session.data.pemeriksaan = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Pemeriksaan fisik dicatat.",
-    });
-
-    await askPenunjang(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // PENUNJANG
-  // ===================================================
-
-  if (session.step === "ukp_penunjang") {
-    session.data.penunjang = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Pemeriksaan penunjang dicatat.",
-    });
-
-    await askDiagnosis(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // DIAGNOSIS
-  // ===================================================
-
-  if (session.step === "ukp_diagnosis") {
-    session.data.diagnosis = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Diagnosis dicatat.",
-    });
-
-    await askFarmakoterapi(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // FARMAKOTERAPI
-  // ===================================================
-
-  if (session.step === "ukp_farmakoterapi") {
-    session.data.farmakoterapi = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Farmakoterapi dicatat.",
-    });
-
-    await askNonFarmakoterapi(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // NON FARMAKOTERAPI
-  // ===================================================
-
-  if (session.step === "ukp_non_farmakoterapi") {
-    session.data.non_farmakoterapi = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Non-farmakoterapi dicatat.",
-    });
-
-    await askMonitoring(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // MONITORING
-  // ===================================================
-
-  if (session.step === "ukp_monitoring") {
-    session.data.monitoring = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Monitoring dan evaluasi dicatat.",
-    });
-
-    await askDiagnosisBanding(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // DIAGNOSIS BANDING
-  // ===================================================
-
-  if (session.step === "ukp_diagnosis_banding") {
-    session.data.diagnosis_banding = text;
-
-    await telegram("sendMessage", {
-      chat_id: chatId,
-      text: "✅ Diagnosis banding dicatat.",
-    });
-
-    await askStatusRujukan(chatId);
-
-    return;
-  }
-
-  // ===================================================
-  // FALLBACK SESSION
-  // ===================================================
-
-  sessions.delete(chatId);
-
-  await telegram("sendMessage", {
-    chat_id: chatId,
-    text:
-      "⚠️ Sesi input tidak dikenali.\n\n" +
-      "Silakan mulai kembali dari menu utama.",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🏠 Menu Utama",
-            callback_data: "menu_start",
-          },
-        ],
-      ],
-    },
-  });
-}
-
-// =====================================================
-// POST WEBHOOK
-// =====================================================
-
-export async function POST(request: Request) {
-  try {
-    const update = await request.json();
-
-    console.log("=================================");
-    console.log("TELEGRAM UPDATE");
-    console.log(JSON.stringify(update, null, 2));
-    console.log("=================================");
-
-    // Callback dari tombol
-    if (update.callback_query) {
-      await handleCallback(update);
-
-      return NextResponse.json({
-        ok: true,
-      });
-    }
-
-    // Pesan biasa
-    if (update.message) {
-      await handleMessage(update);
-
-      return NextResponse.json({
-        ok: true,
-      });
-    }
-
     return NextResponse.json({
       ok: true,
     });
   } catch (error) {
-    console.error("Telegram webhook error:", error);
+    console.error(
+      "Telegram webhook error:",
+      error
+    );
 
     return NextResponse.json(
       {
