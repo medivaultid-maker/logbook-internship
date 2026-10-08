@@ -86,9 +86,10 @@ async function saveUKPToSupabase(
     );
   }
 
-  // ==========================================
-  // VALIDASI SEMUA DATA WAJIB
-  // ==========================================
+  // =====================================================
+  // VALIDASI SEMUA FIELD WAJIB
+  // Tidak boleh ada field kosong / null
+  // =====================================================
 
   const requiredFields = [
     "tanggal_pelayanan",
@@ -105,48 +106,68 @@ async function saveUKPToSupabase(
     "pemeriksaan_fisik",
     "pemeriksaan_penunjang",
     "diagnosis",
+    "diagnosis_banding",
     "farmakoterapi",
     "non_farmakoterapi",
     "monitoring_evaluasi",
-    "diagnosis_banding",
     "status_rujukan",
   ];
 
-  for (const field of requiredFields) {
-    if (
-      data[field] === undefined ||
-      data[field] === null ||
-      String(data[field]).trim() === ""
-    ) {
-      throw new Error(
-        `Data wajib belum lengkap: ${field}`
-      );
-    }
+  const missingFields = requiredFields.filter(
+    (field) =>
+      !data[field] ||
+      data[field].trim() === ""
+  );
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      `Field UKP belum lengkap: ${missingFields.join(", ")}`
+    );
   }
 
-  // ==========================================
-  // PAYLOAD
-  // ==========================================
+  // =====================================================
+  // KONVERSI TB & BB
+  // =====================================================
+
+  const tb = Number(
+    data.tb.replace(",", ".")
+  );
+
+  const bb = Number(
+    data.bb.replace(",", ".")
+  );
+
+  if (!Number.isFinite(tb) || tb <= 0) {
+    throw new Error(
+      "Tinggi badan (TB) tidak valid"
+    );
+  }
+
+  if (!Number.isFinite(bb) || bb <= 0) {
+    throw new Error(
+      "Berat badan (BB) tidak valid"
+    );
+  }
+
+  // =====================================================
+  // PAYLOAD SESUAI NAMA KOLOM TABEL `ukp`
+  // =====================================================
 
   const payload = {
-    // ==========================================
-    // IDENTITAS / INFORMASI DASAR
-    // ==========================================
+    tanggal_pelayanan:
+      data.tanggal_pelayanan,
 
-    jenis_tindakan:
-      data.jenis_tindakan,
-
-    no_rekam_medis:
+    no_rm:
       data.no_rm,
 
     inisial_pasien:
       data.inisial_pasien,
 
+    jenis_tindakan:
+      data.jenis_tindakan,
+
     sumber_data:
       data.sumber_data,
-
-    tanggal_pelayanan:
-      data.tanggal_pelayanan,
 
     jenis_kelamin:
       data.jenis_kelamin,
@@ -157,19 +178,11 @@ async function saveUKPToSupabase(
     kategori_kasus:
       data.kategori_kasus,
 
-    // ==========================================
-    // ANTROPOMETRI
-    // ==========================================
+    tb:
+      tb,
 
-    berat_badan:
-      Number(data.bb),
-
-    tinggi_badan:
-      Number(data.tb),
-
-    // ==========================================
-    // DATA KLINIS
-    // ==========================================
+    bb:
+      bb,
 
     anamnesis:
       data.anamnesis,
@@ -180,19 +193,11 @@ async function saveUKPToSupabase(
     pemeriksaan_penunjang:
       data.pemeriksaan_penunjang,
 
-    // ==========================================
-    // DIAGNOSIS
-    // ==========================================
-
-    diagnosis_text:
+    diagnosis:
       data.diagnosis,
 
-    diagnosis_banding_text:
+    diagnosis_banding:
       data.diagnosis_banding,
-
-    // ==========================================
-    // TATALAKSANA
-    // ==========================================
 
     farmakoterapi:
       data.farmakoterapi,
@@ -203,53 +208,13 @@ async function saveUKPToSupabase(
     monitoring_evaluasi:
       data.monitoring_evaluasi,
 
-    // ==========================================
-    // RUJUKAN
-    // ==========================================
-
     status_rujukan:
       data.status_rujukan,
-
-    // ==========================================
-    // STATUS
-    // ==========================================
-
-    status:
-      "ready",
-
-    // ==========================================
-    // RAW DATA TELEGRAM
-    // ==========================================
-
-    telegram_raw_input:
-      JSON.stringify(data),
   };
 
-  // ==========================================
-  // VALIDASI ANGKA
-  // ==========================================
-
-  if (
-    !Number.isFinite(payload.berat_badan) ||
-    payload.berat_badan <= 0
-  ) {
-    throw new Error(
-      "Berat badan tidak valid"
-    );
-  }
-
-  if (
-    !Number.isFinite(payload.tinggi_badan) ||
-    payload.tinggi_badan <= 0
-  ) {
-    throw new Error(
-      "Tinggi badan tidak valid"
-    );
-  }
-
-  // ==========================================
-  // DEBUG PAYLOAD
-  // ==========================================
+  // =====================================================
+  // LOG PAYLOAD
+  // =====================================================
 
   console.log(
     "========================================"
@@ -271,9 +236,9 @@ async function saveUKPToSupabase(
     "========================================"
   );
 
-  // ==========================================
-  // INSERT KE TABEL ukp
-  // ==========================================
+  // =====================================================
+  // INSERT KE SUPABASE
+  // =====================================================
 
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/ukp`,
@@ -299,12 +264,12 @@ async function saveUKPToSupabase(
     }
   );
 
-  // ==========================================
-  // BACA RESPONSE SUPABASE
-  // ==========================================
-
   const resultText =
     await response.text();
+
+  // =====================================================
+  // LOG RESPONSE SUPABASE
+  // =====================================================
 
   console.log(
     "SUPABASE STATUS:",
@@ -316,9 +281,9 @@ async function saveUKPToSupabase(
     resultText
   );
 
-  // ==========================================
+  // =====================================================
   // JIKA ERROR
-  // ==========================================
+  // =====================================================
 
   if (!response.ok) {
     let result: any = null;
@@ -334,7 +299,6 @@ async function saveUKPToSupabase(
       result?.message ||
       result?.hint ||
       result?.details ||
-      result?.code ||
       result?.error ||
       resultText ||
       "Gagal menyimpan data UKP ke Supabase";
@@ -344,9 +308,9 @@ async function saveUKPToSupabase(
     );
   }
 
-  // ==========================================
+  // =====================================================
   // BERHASIL
-  // ==========================================
+  // =====================================================
 
   try {
     return JSON.parse(resultText);
@@ -561,7 +525,8 @@ async function askNoRM(
     chat_id: chatId,
     text:
       "🧾 <b>No. RM</b>\n\n" +
-      "Masukkan nomor rekam medis pasien.",
+      "Masukkan nomor rekam medis pasien.\n\n" +
+      "⚠️ Data ini wajib diisi.",
     parse_mode: "HTML",
     reply_markup: {
       inline_keyboard: [
