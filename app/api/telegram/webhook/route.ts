@@ -62,63 +62,132 @@ async function telegram(method: string, body: any) {
    SUPABASE INSERT
 ===================================================== */
 
-async function saveUKPToSupabase(data: Record<string, string>) {
+async function saveUKPToSupabase(
+  data: Record<string, string>
+) {
   if (!SUPABASE_URL) {
     throw new Error("SUPABASE_URL belum diatur");
   }
 
   if (!SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY belum diatur");
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY belum diatur"
+    );
   }
 
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ukp`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      tanggal_pelayanan: data.tanggal_pelayanan,
-      no_rm: data.no_rm || null,
-      jenis_tindakan: data.jenis_tindakan,
-      sumber_data: data.sumber_data,
-      jenis_kelamin: data.jenis_kelamin,
-      kategori_pasien: data.kategori_pasien,
-      kategori_kasus: data.kategori_kasus,
-      tb: data.tb ? Number(data.tb) : null,
-      bb: data.bb ? Number(data.bb) : null,
-      anamnesis: data.anamnesis || null,
-      pemeriksaan_fisik: data.pemeriksaan_fisik || null,
-      pemeriksaan_penunjang:
-        data.pemeriksaan_penunjang || null,
-      diagnosis: data.diagnosis,
-      diagnosis_banding:
-        data.diagnosis_banding || null,
-      farmakoterapi:
-        data.farmakoterapi || null,
-      non_farmakoterapi:
-        data.non_farmakoterapi || null,
-      monitoring_evaluasi:
-        data.monitoring_evaluasi || null,
-      status_rujukan: data.status_rujukan,
-    }),
-  });
+  const payload = {
+    jenis_tindakan: data.jenis_tindakan || null,
 
-  const result = await response.json();
+    no_rekam_medis: data.no_rm || null,
+
+    sumber_data: data.sumber_data || null,
+
+    tanggal_pelayanan:
+      data.tanggal_pelayanan || null,
+
+    inisial_pasien:
+      data.inisial_pasien || null,
+
+    jenis_kelamin:
+      data.jenis_kelamin || null,
+
+    kategori_pasien:
+      data.kategori_pasien || null,
+
+    kategori_kasus:
+      data.kategori_kasus || null,
+
+    berat_badan:
+      data.bb ? Number(data.bb) : null,
+
+    tinggi_badan:
+      data.tb ? Number(data.tb) : null,
+
+    anamnesis:
+      data.anamnesis || null,
+
+    pemeriksaan_fisik:
+      data.pemeriksaan_fisik || null,
+
+    pemeriksaan_penunjang:
+      data.pemeriksaan_penunjang || null,
+
+    diagnosis_text:
+      data.diagnosis || null,
+
+    diagnosis_banding_text:
+      data.diagnosis_banding || null,
+
+    farmakoterapi:
+      data.farmakoterapi || null,
+
+    non_farmakoterapi:
+      data.non_farmakoterapi || null,
+
+    monitoring_evaluasi:
+      data.monitoring_evaluasi || null,
+
+    status_rujukan:
+      data.status_rujukan || null,
+  };
+
+  console.log(
+    "PAYLOAD UKP:",
+    JSON.stringify(payload, null, 2)
+  );
+
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/ukp_entries`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization:
+          `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        Prefer: "return=representation",
+      },
+
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const resultText = await response.text();
+
+  console.log(
+    "SUPABASE STATUS:",
+    response.status
+  );
+
+  console.log(
+    "SUPABASE RESPONSE:",
+    resultText
+  );
 
   if (!response.ok) {
-    console.error("Supabase insert error:", result);
+    let result;
+
+    try {
+      result = JSON.parse(resultText);
+    } catch {
+      result = null;
+    }
 
     throw new Error(
       result?.message ||
         result?.hint ||
+        result?.details ||
+        resultText ||
         "Gagal menyimpan data UKP ke Supabase"
     );
   }
 
-  return result;
+  try {
+    return JSON.parse(resultText);
+  } catch {
+    return resultText;
+  }
 }
 
 /* =====================================================
