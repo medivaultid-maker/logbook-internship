@@ -70,7 +70,7 @@ function escapeHtml(value: string): string {
 }
 
 /* =====================================================
-   SUPABASE INSERT
+   SUPABASE INSERT UKP
 ===================================================== */
 
 async function saveUKPToSupabase(
@@ -86,21 +86,21 @@ async function saveUKPToSupabase(
     );
   }
 
-  /* ===================================================
-     VALIDASI SEMUA FIELD WAJIB
-  =================================================== */
+  // ==========================================
+  // VALIDASI SEMUA DATA WAJIB
+  // ==========================================
 
   const requiredFields = [
-    "jenis_tindakan",
+    "tanggal_pelayanan",
     "no_rm",
     "inisial_pasien",
+    "jenis_tindakan",
     "sumber_data",
-    "tanggal_pelayanan",
     "jenis_kelamin",
     "kategori_pasien",
     "kategori_kasus",
-    "bb",
     "tb",
+    "bb",
     "anamnesis",
     "pemeriksaan_fisik",
     "pemeriksaan_penunjang",
@@ -114,18 +114,19 @@ async function saveUKPToSupabase(
 
   for (const field of requiredFields) {
     if (
-      !data[field] ||
-      data[field].trim() === ""
+      data[field] === undefined ||
+      data[field] === null ||
+      String(data[field]).trim() === ""
     ) {
       throw new Error(
-        `Field wajib belum diisi: ${field}`
+        `Data wajib belum lengkap: ${field}`
       );
     }
   }
 
-  /* ===================================================
-     PAYLOAD
-  =================================================== */
+  // ==========================================
+  // PAYLOAD
+  // ==========================================
 
   const payload = {
     // ==========================================
@@ -210,7 +211,7 @@ async function saveUKPToSupabase(
       data.status_rujukan,
 
     // ==========================================
-    // STATUS LOGBOOK
+    // STATUS
     // ==========================================
 
     status:
@@ -224,9 +225,9 @@ async function saveUKPToSupabase(
       JSON.stringify(data),
   };
 
-  /* ===================================================
-     VALIDASI ANGKA
-  =================================================== */
+  // ==========================================
+  // VALIDASI ANGKA
+  // ==========================================
 
   if (
     !Number.isFinite(payload.berat_badan) ||
@@ -246,9 +247,9 @@ async function saveUKPToSupabase(
     );
   }
 
-  /* ===================================================
-     LOG
-  =================================================== */
+  // ==========================================
+  // DEBUG PAYLOAD
+  // ==========================================
 
   console.log(
     "========================================"
@@ -259,16 +260,20 @@ async function saveUKPToSupabase(
   );
 
   console.log(
-    JSON.stringify(payload, null, 2)
+    JSON.stringify(
+      payload,
+      null,
+      2
+    )
   );
 
   console.log(
     "========================================"
   );
 
-  /* ===================================================
-     INSERT SUPABASE
-  =================================================== */
+  // ==========================================
+  // INSERT KE TABEL ukp
+  // ==========================================
 
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/ukp`,
@@ -294,6 +299,10 @@ async function saveUKPToSupabase(
     }
   );
 
+  // ==========================================
+  // BACA RESPONSE SUPABASE
+  // ==========================================
+
   const resultText =
     await response.text();
 
@@ -307,9 +316,9 @@ async function saveUKPToSupabase(
     resultText
   );
 
-  /* ===================================================
-     JIKA SUPABASE MENOLAK
-  =================================================== */
+  // ==========================================
+  // JIKA ERROR
+  // ==========================================
 
   if (!response.ok) {
     let result: any = null;
@@ -325,6 +334,7 @@ async function saveUKPToSupabase(
       result?.message ||
       result?.hint ||
       result?.details ||
+      result?.code ||
       result?.error ||
       resultText ||
       "Gagal menyimpan data UKP ke Supabase";
@@ -334,9 +344,9 @@ async function saveUKPToSupabase(
     );
   }
 
-  /* ===================================================
-     BERHASIL
-  =================================================== */
+  // ==========================================
+  // BERHASIL
+  // ==========================================
 
   try {
     return JSON.parse(resultText);
@@ -549,21 +559,16 @@ async function askNoRM(
 ) {
   const body = {
     chat_id: chatId,
-
     text:
       "🧾 <b>No. RM</b>\n\n" +
-      "Masukkan nomor rekam medis pasien.\n\n" +
-      "⚠️ Data ini wajib diisi.",
-
+      "Masukkan nomor rekam medis pasien.",
     parse_mode: "HTML",
-
     reply_markup: {
       inline_keyboard: [
         [
           {
             text: "❌ Batalkan",
-            callback_data:
-              "menu_start",
+            callback_data: "menu_start",
           },
         ],
       ],
@@ -571,14 +576,10 @@ async function askNoRM(
   };
 
   if (messageId) {
-    return telegram(
-      "editMessageText",
-      {
-        ...body,
-        message_id:
-          messageId,
-      }
-    );
+    return telegram("editMessageText", {
+      ...body,
+      message_id: messageId,
+    });
   }
 
   return telegram(
