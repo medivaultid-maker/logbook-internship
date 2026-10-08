@@ -1,11 +1,40 @@
 "use client";
 
 import SearchableDiagnosis from "@/components/SearchableDiagnosis";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 /* =========================================================
-   MASTER DATA UKP
+   TYPE DATA UKP
+========================================================= */
+
+type UKP = {
+  id: string;
+  tanggal_pelayanan: string;
+  no_rm: string;
+  jenis_tindakan: string;
+  sumber_data: string;
+  jenis_kelamin: string;
+  kategori_pasien: string;
+  kategori_kasus: string;
+  tb: number;
+  bb: number;
+  anamnesis: string;
+  pemeriksaan_fisik: string;
+  pemeriksaan_penunjang: string;
+  diagnosis: string;
+  diagnosis_banding: string;
+  farmakoterapi: string;
+  non_farmakoterapi: string;
+  monitoring_evaluasi: string;
+  status_rujukan: string;
+  created_at: string;
+  updated_at: string;
+  inisial_pasien: string;
+};
+
+/* =========================================================
+   MASTER DATA
 ========================================================= */
 
 const jenisTindakan = [
@@ -14,7 +43,7 @@ const jenisTindakan = [
   "Kegawatdaruratan",
   "Kejiwaan",
   "Medikolegal",
-  "Kebidanan-perinatal",
+  "Kebidanan-Perinatal",
 ];
 
 const sumberData = [
@@ -35,7 +64,7 @@ const kategoriPasien = [
 ];
 
 const kategoriKasus = [
-  "Non-Covid",
+  "Non-COVID",
   "Suspect",
   "Probable",
   "Kontak Erat",
@@ -44,7 +73,7 @@ const kategoriKasus = [
 
 const statusRujukan = [
   "Rujuk",
-  "Tidak rujuk",
+  "Tidak Rujuk",
 ];
 
 /* =========================================================
@@ -52,10 +81,22 @@ const statusRujukan = [
 ========================================================= */
 
 export default function UKPPage() {
+  /* =======================================================
+     DATA DARI SUPABASE
+  ======================================================= */
+
+  const [entries, setEntries] = useState<UKP[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  const [search, setSearch] = useState("");
+
+  /* =======================================================
+     FORM
+  ======================================================= */
 
   const [form, setForm] = useState({
     jenis_tindakan: "",
-    no_rekam_medis: "",
+    no_rm: "",
     sumber_data: "",
     tanggal_pelayanan: new Date()
       .toISOString()
@@ -67,14 +108,15 @@ export default function UKPPage() {
     kategori_pasien: "",
     kategori_kasus: "",
 
-    berat_badan: "",
-    tinggi_badan: "",
+    tb: "",
+    bb: "",
 
     anamnesis: "",
     pemeriksaan_fisik: "",
     pemeriksaan_penunjang: "",
 
-    tata_laksana: "",
+    diagnosis: "",
+    diagnosis_banding: "",
 
     farmakoterapi: "",
     non_farmakoterapi: "",
@@ -100,12 +142,52 @@ export default function UKPPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  /* =========================================================
-     UPDATE FIELD
-  ========================================================= */
+  /* =======================================================
+     AMBIL DATA UKP DARI SUPABASE
+  ======================================================= */
+
+  async function loadUKP() {
+    setLoadingData(true);
+
+    const { data, error } = await supabase
+      .from("ukp")
+      .select("*")
+      .order("tanggal_pelayanan", {
+        ascending: false,
+      })
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (error) {
+      console.error("Gagal mengambil data UKP:", error);
+
+      setMessage(
+        `Gagal mengambil data UKP: ${error.message}`
+      );
+
+      setEntries([]);
+    } else {
+      setEntries(data ?? []);
+    }
+
+    setLoadingData(false);
+  }
+
+  /* =======================================================
+     LOAD SAAT HALAMAN DIBUKA
+  ======================================================= */
+
+  useEffect(() => {
+    loadUKP();
+  }, []);
+
+  /* =======================================================
+     UPDATE FORM
+  ======================================================= */
 
   function updateField(
-    field: string,
+    field: keyof typeof form,
     value: string
   ) {
     setForm((prev) => ({
@@ -114,57 +196,82 @@ export default function UKPPage() {
     }));
   }
 
-  /* =========================================================
-     SAVE
-  ========================================================= */
+  /* =======================================================
+     SIMPAN DATA DARI DASHBOARD
+  ======================================================= */
 
   async function saveData() {
-
     setLoading(true);
     setMessage("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    /* ===============================================
+       VALIDASI SEMUA FIELD
+    =============================================== */
 
-    if (!user) {
+    const requiredFields = [
+      ["Jenis tindakan", form.jenis_tindakan],
+      ["No. Rekam Medis", form.no_rm],
+      ["Sumber data", form.sumber_data],
+      ["Tanggal pelayanan", form.tanggal_pelayanan],
+      ["Inisial pasien", form.inisial_pasien],
+      ["Jenis kelamin", form.jenis_kelamin],
+      ["Kategori pasien", form.kategori_pasien],
+      ["Kategori kasus", form.kategori_kasus],
+      ["TB", form.tb],
+      ["BB", form.bb],
+      ["Anamnesis", form.anamnesis],
+      ["Pemeriksaan fisik", form.pemeriksaan_fisik],
+      [
+        "Pemeriksaan penunjang",
+        form.pemeriksaan_penunjang,
+      ],
+      ["Diagnosis", diagnosis?.name],
+      ["Diagnosis banding", diagnosisBanding?.name],
+      ["Farmakoterapi", form.farmakoterapi],
+      [
+        "Non-farmakoterapi",
+        form.non_farmakoterapi,
+      ],
+      [
+        "Monitoring dan evaluasi",
+        form.monitoring_evaluasi,
+      ],
+      ["Status rujukan", form.status_rujukan],
+    ];
+
+    const emptyField = requiredFields.find(
+      ([, value]) =>
+        !value ||
+        String(value).trim() === ""
+    );
+
+    if (emptyField) {
       setMessage(
-        "Sesi login tidak ditemukan."
+        `⚠️ ${emptyField[0]} wajib diisi.`
       );
 
       setLoading(false);
       return;
     }
 
-    if (!diagnosis) {
-      setMessage(
-        "⚠️ Silakan pilih Diagnosis / masalah terlebih dahulu."
-      );
-
-      setLoading(false);
-      return;
-    }
+    /* ===============================================
+       INSERT KE TABEL ukp
+    =============================================== */
 
     const { error } = await supabase
-      .from("ukp_entries")
+      .from("ukp")
       .insert({
+        tanggal_pelayanan:
+          form.tanggal_pelayanan,
 
-        user_id: user.id,
+        no_rm:
+          form.no_rm,
 
         jenis_tindakan:
           form.jenis_tindakan,
 
-        no_rekam_medis:
-          form.no_rekam_medis,
-
         sumber_data:
           form.sumber_data,
-
-        tanggal_pelayanan:
-          form.tanggal_pelayanan,
-
-        inisial_pasien:
-          form.inisial_pasien,
 
         jenis_kelamin:
           form.jenis_kelamin,
@@ -175,15 +282,11 @@ export default function UKPPage() {
         kategori_kasus:
           form.kategori_kasus,
 
-        berat_badan:
-          form.berat_badan
-            ? Number(form.berat_badan)
-            : null,
+        tb:
+          Number(form.tb),
 
-        tinggi_badan:
-          form.tinggi_badan
-            ? Number(form.tinggi_badan)
-            : null,
+        bb:
+          Number(form.bb),
 
         anamnesis:
           form.anamnesis,
@@ -194,17 +297,11 @@ export default function UKPPage() {
         pemeriksaan_penunjang:
           form.pemeriksaan_penunjang,
 
-        diagnosis_id:
-          diagnosis.id,
+        diagnosis:
+          diagnosis?.name ?? "",
 
-        diagnosis_code:
-          diagnosis.code,
-
-        diagnosis_name:
-          diagnosis.name,
-
-        tata_laksana:
-          form.tata_laksana,
+        diagnosis_banding:
+          diagnosisBanding?.name ?? "",
 
         farmakoterapi:
           form.farmakoterapi,
@@ -215,85 +312,121 @@ export default function UKPPage() {
         monitoring_evaluasi:
           form.monitoring_evaluasi,
 
-        diagnosis_banding_id:
-          diagnosisBanding?.id ?? null,
-
-        diagnosis_banding_code:
-          diagnosisBanding?.code ?? null,
-
-        diagnosis_banding_name:
-          diagnosisBanding?.name ?? null,
-
         status_rujukan:
           form.status_rujukan,
 
-        status: "needs_review",
+        inisial_pasien:
+          form.inisial_pasien,
       });
 
     if (error) {
-
-      setMessage(
-        `Gagal menyimpan: ${error.message}`
+      console.error(
+        "Gagal menyimpan UKP:",
+        error
       );
 
-    } else {
-
       setMessage(
-        "✅ Data UKP berhasil disimpan."
+        `❌ Gagal menyimpan: ${error.message}`
       );
 
-      /* RESET */
-
-      setForm({
-        jenis_tindakan: "",
-        no_rekam_medis: "",
-        sumber_data: "",
-
-        tanggal_pelayanan:
-          new Date()
-            .toISOString()
-            .split("T")[0],
-
-        inisial_pasien: "",
-        jenis_kelamin: "",
-
-        kategori_pasien: "",
-        kategori_kasus: "",
-
-        berat_badan: "",
-        tinggi_badan: "",
-
-        anamnesis: "",
-        pemeriksaan_fisik: "",
-        pemeriksaan_penunjang: "",
-
-        tata_laksana: "",
-
-        farmakoterapi: "",
-        non_farmakoterapi: "",
-
-        monitoring_evaluasi: "",
-
-        status_rujukan: "",
-      });
-
-      setDiagnosis(null);
-      setDiagnosisBanding(null);
+      setLoading(false);
+      return;
     }
+
+    /* ===============================================
+       BERHASIL
+    =============================================== */
+
+    setMessage(
+      "✅ Data UKP berhasil disimpan."
+    );
+
+    /* RESET */
+
+    setForm({
+      jenis_tindakan: "",
+      no_rm: "",
+      sumber_data: "",
+
+      tanggal_pelayanan:
+        new Date()
+          .toISOString()
+          .split("T")[0],
+
+      inisial_pasien: "",
+      jenis_kelamin: "",
+
+      kategori_pasien: "",
+      kategori_kasus: "",
+
+      tb: "",
+      bb: "",
+
+      anamnesis: "",
+      pemeriksaan_fisik: "",
+      pemeriksaan_penunjang: "",
+
+      diagnosis: "",
+      diagnosis_banding: "",
+
+      farmakoterapi: "",
+      non_farmakoterapi: "",
+
+      monitoring_evaluasi: "",
+
+      status_rujukan: "",
+    });
+
+    setDiagnosis(null);
+    setDiagnosisBanding(null);
+
+    /* REFRESH DATA */
+
+    await loadUKP();
 
     setLoading(false);
   }
 
-  /* =========================================================
+  /* =======================================================
+     FILTER SEARCH
+  ======================================================= */
+
+  const filteredEntries = entries.filter(
+    (entry) => {
+      const keyword =
+        search.toLowerCase().trim();
+
+      if (!keyword) return true;
+
+      return (
+        entry.no_rm
+          ?.toLowerCase()
+          .includes(keyword) ||
+        entry.inisial_pasien
+          ?.toLowerCase()
+          .includes(keyword) ||
+        entry.diagnosis
+          ?.toLowerCase()
+          .includes(keyword) ||
+        entry.jenis_tindakan
+          ?.toLowerCase()
+          .includes(keyword)
+      );
+    }
+  );
+
+  /* =======================================================
      UI
-  ========================================================= */
+  ======================================================= */
 
   return (
     <main className="min-h-screen bg-slate-50">
 
-      <div className="mx-auto max-w-5xl px-6 py-10">
+      <div className="mx-auto max-w-7xl px-6 py-10">
 
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
         <div className="mb-8">
 
@@ -306,24 +439,219 @@ export default function UKPPage() {
           </h1>
 
           <p className="mt-2 text-slate-500">
-            Lengkapi data serangkaian kegiatan
-            Upaya Kesehatan Perseorangan (UKP).
+            Upaya Kesehatan Perseorangan
           </p>
 
         </div>
 
 
+        {/* =================================================
+            DATA UKP YANG SUDAH TERSIMPAN
+        ================================================= */}
+
+        <section className="mb-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200">
+
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
+            <div>
+              <h2 className="text-lg font-bold">
+                Data UKP
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Data dari Telegram dan dashboard
+                tersimpan di tabel <b>ukp</b>.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadUKP}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              🔄 Refresh
+            </button>
+
+          </div>
+
+
+          {/* SEARCH */}
+
+          <div className="mt-5">
+
+            <input
+              type="text"
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              placeholder="🔎 Cari No. RM, inisial, diagnosis..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-teal-400 focus:bg-white"
+            />
+
+          </div>
+
+
+          {/* TABLE */}
+
+          <div className="mt-5 overflow-x-auto">
+
+            {loadingData ? (
+
+              <div className="py-10 text-center text-sm text-slate-500">
+                Memuat data UKP...
+              </div>
+
+            ) : filteredEntries.length === 0 ? (
+
+              <div className="py-10 text-center text-sm text-slate-500">
+                Belum ada data UKP.
+              </div>
+
+            ) : (
+
+              <table className="w-full min-w-[1100px] text-sm">
+
+                <thead>
+
+                  <tr className="border-b border-slate-200 text-left">
+
+                    <th className="px-4 py-3 font-semibold">
+                      Tanggal
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      No. RM
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      Pasien
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      Tindakan
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      Sumber
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      Kategori
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      Diagnosis
+                    </th>
+
+                    <th className="px-4 py-3 font-semibold">
+                      Rujukan
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                  {filteredEntries.map(
+                    (entry) => (
+
+                      <tr
+                        key={entry.id}
+                        className="border-b border-slate-100 hover:bg-slate-50"
+                      >
+
+                        <td className="px-4 py-3">
+                          {formatDate(
+                            entry.tanggal_pelayanan
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {entry.no_rm}
+                        </td>
+
+                        <td className="px-4 py-3">
+
+                          <div className="font-medium">
+                            {entry.inisial_pasien}
+                          </div>
+
+                          <div className="text-xs text-slate-500">
+                            {entry.jenis_kelamin}
+                          </div>
+
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {entry.jenis_tindakan}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {entry.sumber_data}
+                        </td>
+
+                        <td className="px-4 py-3">
+
+                          <div>
+                            {entry.kategori_pasien}
+                          </div>
+
+                          <div className="text-xs text-slate-500">
+                            {entry.kategori_kasus}
+                          </div>
+
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {entry.diagnosis}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {entry.status_rujukan}
+                        </td>
+
+                      </tr>
+
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+
+            )}
+
+          </div>
+
+
+          {/* JUMLAH DATA */}
+
+          {!loadingData && (
+            <div className="mt-4 text-sm text-slate-500">
+              Menampilkan{" "}
+              <b>{filteredEntries.length}</b>{" "}
+              dari <b>{entries.length}</b> data UKP.
+            </div>
+          )}
+
+        </section>
+
+
+        {/* =================================================
+            FORM INPUT
+        ================================================= */}
+
         <div className="space-y-6">
 
-
-          {/* =================================================
-              IDENTITAS PELAYANAN
-          ================================================= */}
+          {/* IDENTITAS */}
 
           <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
 
             <h2 className="text-lg font-bold">
-              Identitas Pelayanan
+              Input Data UKP
             </h2>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
@@ -342,10 +670,10 @@ export default function UKPPage() {
 
               <Input
                 label="No. Rekam Medis"
-                value={form.no_rekam_medis}
+                value={form.no_rm}
                 onChange={(value) =>
                   updateField(
-                    "no_rekam_medis",
+                    "no_rm",
                     value
                   )
                 }
@@ -426,12 +754,9 @@ export default function UKPPage() {
                 label="Berat badan"
                 suffix="kg"
                 type="number"
-                value={form.berat_badan}
+                value={form.bb}
                 onChange={(value) =>
-                  updateField(
-                    "berat_badan",
-                    value
-                  )
+                  updateField("bb", value)
                 }
               />
 
@@ -439,12 +764,9 @@ export default function UKPPage() {
                 label="Tinggi badan"
                 suffix="cm"
                 type="number"
-                value={form.tinggi_badan}
+                value={form.tb}
                 onChange={(value) =>
-                  updateField(
-                    "tinggi_badan",
-                    value
-                  )
+                  updateField("tb", value)
                 }
               />
 
@@ -453,9 +775,7 @@ export default function UKPPage() {
           </section>
 
 
-          {/* =================================================
-              DATA KLINIS
-          ================================================= */}
+          {/* DATA KLINIS */}
 
           <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
 
@@ -464,7 +784,6 @@ export default function UKPPage() {
             </h2>
 
             <div className="mt-5 space-y-5">
-
 
               <Textarea
                 label="Anamnesis"
@@ -477,7 +796,6 @@ export default function UKPPage() {
                 }
               />
 
-
               <Textarea
                 label="Pemeriksaan fisik"
                 value={form.pemeriksaan_fisik}
@@ -488,7 +806,6 @@ export default function UKPPage() {
                   )
                 }
               />
-
 
               <Textarea
                 label="Pemeriksaan penunjang"
@@ -503,32 +820,12 @@ export default function UKPPage() {
                 }
               />
 
-
-              {/* DIAGNOSIS */}
-
               <SearchableDiagnosis
                 label="Diagnosis / masalah"
                 value={diagnosis}
                 onChange={setDiagnosis}
                 placeholder="🔎 Cari diagnosis ICD-10..."
               />
-
-
-              {/* TATA LAKSANA */}
-
-              <Textarea
-                label="Tata laksana"
-                value={form.tata_laksana}
-                onChange={(value) =>
-                  updateField(
-                    "tata_laksana",
-                    value
-                  )
-                }
-              />
-
-
-              {/* FARMako */}
 
               <Textarea
                 label="Farmakoterapi"
@@ -541,9 +838,6 @@ export default function UKPPage() {
                 }
                 placeholder="Contoh: Paracetamol 500 mg 3x1"
               />
-
-
-              {/* NON FARMAKO */}
 
               <Textarea
                 label="Non-Farmakoterapi"
@@ -558,9 +852,6 @@ export default function UKPPage() {
                 }
               />
 
-
-              {/* MONITORING */}
-
               <Textarea
                 label="Monitoring dan evaluasi"
                 value={
@@ -574,9 +865,6 @@ export default function UKPPage() {
                 }
               />
 
-
-              {/* DIAGNOSIS BANDING */}
-
               <SearchableDiagnosis
                 label="Diagnosis Banding"
                 value={diagnosisBanding}
@@ -589,9 +877,7 @@ export default function UKPPage() {
           </section>
 
 
-          {/* =================================================
-              RUJUKAN
-          ================================================= */}
+          {/* RUJUKAN */}
 
           <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
 
@@ -602,7 +888,7 @@ export default function UKPPage() {
             <div className="mt-5">
 
               <SelectField
-                label="Status rujukan (sesuai level kompetensi SKDI)"
+                label="Status rujukan"
                 value={form.status_rujukan}
                 options={statusRujukan}
                 onChange={(value) =>
@@ -618,9 +904,7 @@ export default function UKPPage() {
           </section>
 
 
-          {/* =================================================
-              SAVE
-          ================================================= */}
+          {/* SAVE */}
 
           <section>
 
@@ -636,11 +920,9 @@ export default function UKPPage() {
               disabled={loading}
               className="w-full rounded-2xl bg-slate-900 px-6 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
-
               {loading
                 ? "Menyimpan..."
                 : "💾 Simpan Data UKP"}
-
             </button>
 
           </section>
@@ -651,6 +933,23 @@ export default function UKPPage() {
 
     </main>
   );
+}
+
+
+/* =========================================================
+   FORMAT DATE
+========================================================= */
+
+function formatDate(date: string) {
+  if (!date) return "-";
+
+  const parts = date.split("-");
+
+  if (parts.length !== 3) {
+    return date;
+  }
+
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
 
@@ -671,7 +970,6 @@ function Input({
   type?: string;
   suffix?: string;
 }) {
-
   return (
     <div>
 
@@ -687,6 +985,7 @@ function Input({
           onChange={(e) =>
             onChange(e.target.value)
           }
+          required
           className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-teal-400 focus:bg-white ${
             suffix ? "pr-12" : ""
           }`}
@@ -720,7 +1019,6 @@ function SelectField({
   options: string[];
   onChange: (value: string) => void;
 }) {
-
   return (
     <div>
 
@@ -733,6 +1031,7 @@ function SelectField({
         onChange={(e) =>
           onChange(e.target.value)
         }
+        required
         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-teal-400 focus:bg-white"
       >
 
@@ -771,7 +1070,6 @@ function Textarea({
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
-
   return (
     <div>
 
@@ -783,6 +1081,7 @@ function Textarea({
         rows={5}
         value={value}
         placeholder={placeholder}
+        required
         onChange={(e) =>
           onChange(e.target.value)
         }
