@@ -6,25 +6,39 @@ import { supabase } from "@/lib/supabase";
 
 type UkpForm = {
   jenis_tindakan: string;
-  no_rekam_medis: string;
+  no_rm: string;
   sumber_data: string;
   tanggal_pelayanan: string;
   inisial_pasien: string;
   jenis_kelamin: string;
   kategori_pasien: string;
   kategori_kasus: string;
-  berat_badan: string;
-  tinggi_badan: string;
+
+  bb: string;
+  tb: string;
+
   anamnesis: string;
   pemeriksaan_fisik: string;
   pemeriksaan_penunjang: string;
-  diagnosis_text: string;
+
+  diagnosis: string;
+  diagnosis_banding: string;
+
   farmakoterapi: string;
   non_farmakoterapi: string;
   monitoring_evaluasi: string;
-  diagnosis_banding_text: string;
+
   status_rujukan: string;
 };
+
+const jenisTindakan = [
+  "Medik",
+  "Bedah",
+  "Kegawatdaruratan",
+  "Kejiwaan",
+  "Medikolegal",
+  "Kebidanan-perinatal",
+];
 
 const jenisKelamin = [
   "Laki-laki",
@@ -35,6 +49,20 @@ const sumberData = [
   "Rawat Darurat",
   "Rawat Inap",
   "Rawat Jalan",
+];
+
+const kategoriPasien = [
+  "Bayi-Anak",
+  "Dewasa",
+  "Lansia",
+];
+
+const kategoriKasus = [
+  "Non-Covid",
+  "Suspect",
+  "Probable",
+  "Kontak Erat",
+  "Konfirmasi",
 ];
 
 const statusRujukan = [
@@ -50,23 +78,28 @@ export default function EditUkpPage() {
 
   const [form, setForm] = useState<UkpForm>({
     jenis_tindakan: "",
-    no_rekam_medis: "",
+    no_rm: "",
     sumber_data: "",
     tanggal_pelayanan: "",
     inisial_pasien: "",
     jenis_kelamin: "",
     kategori_pasien: "",
     kategori_kasus: "",
-    berat_badan: "",
-    tinggi_badan: "",
+
+    bb: "",
+    tb: "",
+
     anamnesis: "",
     pemeriksaan_fisik: "",
     pemeriksaan_penunjang: "",
-    diagnosis_text: "",
+
+    diagnosis: "",
+    diagnosis_banding: "",
+
     farmakoterapi: "",
     non_farmakoterapi: "",
     monitoring_evaluasi: "",
-    diagnosis_banding_text: "",
+
     status_rujukan: "",
   });
 
@@ -79,34 +112,33 @@ export default function EditUkpPage() {
   const [message, setMessage] =
     useState("");
 
+  /* =========================================================
+     LOAD DATA
+  ========================================================= */
+
   useEffect(() => {
+    if (!id) return;
+
     loadData();
   }, [id]);
 
   async function loadData() {
     setLoading(true);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setMessage(
-        "Sesi login tidak ditemukan."
-      );
-      setLoading(false);
-      return;
-    }
+    setMessage("");
 
     const { data, error } =
       await supabase
-        .from("ukp_entries")
+        .from("ukp")
         .select("*")
         .eq("id", id)
-        .eq("user_id", user.id)
         .single();
 
     if (error) {
+      console.error(
+        "Gagal mengambil data UKP:",
+        error
+      );
+
       setMessage(error.message);
       setLoading(false);
       return;
@@ -116,8 +148,8 @@ export default function EditUkpPage() {
       jenis_tindakan:
         data.jenis_tindakan || "",
 
-      no_rekam_medis:
-        data.no_rekam_medis || "",
+      no_rm:
+        data.no_rm || "",
 
       sumber_data:
         data.sumber_data || "",
@@ -137,14 +169,16 @@ export default function EditUkpPage() {
       kategori_kasus:
         data.kategori_kasus || "",
 
-      berat_badan:
-        data.berat_badan !== null
-          ? String(data.berat_badan)
+      bb:
+        data.bb !== null &&
+        data.bb !== undefined
+          ? String(data.bb)
           : "",
 
-      tinggi_badan:
-        data.tinggi_badan !== null
-          ? String(data.tinggi_badan)
+      tb:
+        data.tb !== null &&
+        data.tb !== undefined
+          ? String(data.tb)
           : "",
 
       anamnesis:
@@ -156,8 +190,11 @@ export default function EditUkpPage() {
       pemeriksaan_penunjang:
         data.pemeriksaan_penunjang || "",
 
-      diagnosis_text:
-        data.diagnosis_text || "",
+      diagnosis:
+        data.diagnosis || "",
+
+      diagnosis_banding:
+        data.diagnosis_banding || "",
 
       farmakoterapi:
         data.farmakoterapi || "",
@@ -168,15 +205,16 @@ export default function EditUkpPage() {
       monitoring_evaluasi:
         data.monitoring_evaluasi || "",
 
-      diagnosis_banding_text:
-        data.diagnosis_banding_text || "",
-
       status_rujukan:
         data.status_rujukan || "",
     });
 
     setLoading(false);
   }
+
+  /* =========================================================
+     UPDATE FIELD
+  ========================================================= */
 
   function updateField(
     field: keyof UkpForm,
@@ -188,57 +226,24 @@ export default function EditUkpPage() {
     }));
   }
 
-  function getUkpStatus() {
-  const required = [
-    form.jenis_tindakan,
-    form.no_rekam_medis,
-    form.sumber_data,
-    form.tanggal_pelayanan,
-    form.inisial_pasien,
-    form.jenis_kelamin,
-    form.kategori_pasien,
-    form.kategori_kasus,
-    form.anamnesis,
-    form.pemeriksaan_fisik,
-    form.diagnosis_text,
-    form.farmakoterapi,
-    form.non_farmakoterapi,
-    form.monitoring_evaluasi,
-    form.status_rujukan,
-  ];
-
-  return required.every(
-    (value) => value.trim() !== ""
-  )
-    ? "ready"
-    : "needs_review";
-}
+  /* =========================================================
+     SAVE
+  ========================================================= */
 
   async function saveData() {
     setSaving(true);
     setMessage("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setMessage(
-        "Sesi login tidak ditemukan."
-      );
-      setSaving(false);
-      return;
-    }
-
     const { error } =
       await supabase
-        .from("ukp_entries")
+        .from("ukp")
         .update({
+
           jenis_tindakan:
             form.jenis_tindakan,
 
-          no_rekam_medis:
-            form.no_rekam_medis,
+          no_rm:
+            form.no_rm,
 
           sumber_data:
             form.sumber_data,
@@ -258,14 +263,14 @@ export default function EditUkpPage() {
           kategori_kasus:
             form.kategori_kasus,
 
-          berat_badan:
-            form.berat_badan
-              ? Number(form.berat_badan)
+          bb:
+            form.bb
+              ? Number(form.bb)
               : null,
 
-          tinggi_badan:
-            form.tinggi_badan
-              ? Number(form.tinggi_badan)
+          tb:
+            form.tb
+              ? Number(form.tb)
               : null,
 
           anamnesis:
@@ -277,8 +282,11 @@ export default function EditUkpPage() {
           pemeriksaan_penunjang:
             form.pemeriksaan_penunjang,
 
-          diagnosis_text:
-            form.diagnosis_text,
+          diagnosis:
+            form.diagnosis,
+
+          diagnosis_banding:
+            form.diagnosis_banding,
 
           farmakoterapi:
             form.farmakoterapi,
@@ -289,27 +297,32 @@ export default function EditUkpPage() {
           monitoring_evaluasi:
             form.monitoring_evaluasi,
 
-          diagnosis_banding_text:
-            form.diagnosis_banding_text,
-
           status_rujukan:
             form.status_rujukan,
 
-          status: getUkpStatus(),
+          updated_at:
+            new Date().toISOString(),
+
         })
-        .eq("id", id)
-        .eq("user_id", user.id);
+        .eq("id", id);
 
     if (error) {
-      setMessage(
-        `Gagal menyimpan: ${error.message}`
+
+      console.error(
+        "Gagal menyimpan perubahan UKP:",
+        error
       );
+
+      setMessage(
+        `❌ Gagal menyimpan: ${error.message}`
+      );
+
       setSaving(false);
       return;
     }
 
     setMessage(
-      "✅ Data berhasil diperbarui."
+      "✅ Data UKP berhasil diperbarui."
     );
 
     setTimeout(() => {
@@ -321,20 +334,32 @@ export default function EditUkpPage() {
     setSaving(false);
   }
 
+  /* =========================================================
+     LOADING
+  ========================================================= */
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 p-10">
+
         <div className="mx-auto max-w-4xl text-center text-slate-500">
-          Memuat data...
+          Memuat data UKP...
         </div>
+
       </main>
     );
   }
+
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return (
     <main className="min-h-screen bg-slate-50">
 
       <div className="mx-auto max-w-4xl px-6 py-10">
+
+        {/* BACK */}
 
         <button
           type="button"
@@ -348,6 +373,9 @@ export default function EditUkpPage() {
           ← Kembali ke Detail UKP
         </button>
 
+
+        {/* HEADER */}
+
         <div className="mb-8">
 
           <p className="text-sm font-semibold text-teal-600">
@@ -359,20 +387,22 @@ export default function EditUkpPage() {
           </h1>
 
           <p className="mt-2 text-slate-500">
-            Periksa dan perbarui data sebelum
-            digunakan sebagai draft.
+            Periksa dan perbarui data UKP.
           </p>
 
         </div>
 
 
-        {/* DATA PASIEN */}
+        {/* =================================================
+            DATA PASIEN
+        ================================================= */}
 
         <Section title="Data Pasien">
 
-          <Input
+          <Select
             label="Jenis tindakan"
             value={form.jenis_tindakan}
+            options={jenisTindakan}
             onChange={(value) =>
               updateField(
                 "jenis_tindakan",
@@ -383,10 +413,10 @@ export default function EditUkpPage() {
 
           <Input
             label="No. Rekam Medis"
-            value={form.no_rekam_medis}
+            value={form.no_rm}
             onChange={(value) =>
               updateField(
-                "no_rekam_medis",
+                "no_rm",
                 value
               )
             }
@@ -439,9 +469,10 @@ export default function EditUkpPage() {
             }
           />
 
-          <Input
+          <Select
             label="Kategori pasien"
             value={form.kategori_pasien}
+            options={kategoriPasien}
             onChange={(value) =>
               updateField(
                 "kategori_pasien",
@@ -450,9 +481,10 @@ export default function EditUkpPage() {
             }
           />
 
-          <Input
+          <Select
             label="Kategori kasus"
             value={form.kategori_kasus}
+            options={kategoriKasus}
             onChange={(value) =>
               updateField(
                 "kategori_kasus",
@@ -465,10 +497,10 @@ export default function EditUkpPage() {
             label="Berat badan"
             type="number"
             suffix="kg"
-            value={form.berat_badan}
+            value={form.bb}
             onChange={(value) =>
               updateField(
-                "berat_badan",
+                "bb",
                 value
               )
             }
@@ -478,10 +510,10 @@ export default function EditUkpPage() {
             label="Tinggi badan"
             type="number"
             suffix="cm"
-            value={form.tinggi_badan}
+            value={form.tb}
             onChange={(value) =>
               updateField(
-                "tinggi_badan",
+                "tb",
                 value
               )
             }
@@ -490,7 +522,9 @@ export default function EditUkpPage() {
         </Section>
 
 
-        {/* DATA KLINIS */}
+        {/* =================================================
+            DATA KLINIS
+        ================================================= */}
 
         <Section title="Data Klinis">
 
@@ -531,10 +565,21 @@ export default function EditUkpPage() {
 
           <Textarea
             label="Diagnosis / masalah"
-            value={form.diagnosis_text}
+            value={form.diagnosis}
             onChange={(value) =>
               updateField(
-                "diagnosis_text",
+                "diagnosis",
+                value
+              )
+            }
+          />
+
+          <Textarea
+            label="Diagnosis Banding"
+            value={form.diagnosis_banding}
+            onChange={(value) =>
+              updateField(
+                "diagnosis_banding",
                 value
               )
             }
@@ -575,19 +620,6 @@ export default function EditUkpPage() {
             }
           />
 
-          <Textarea
-            label="Diagnosis Banding"
-            value={
-              form.diagnosis_banding_text
-            }
-            onChange={(value) =>
-              updateField(
-                "diagnosis_banding_text",
-                value
-              )
-            }
-          />
-
           <Select
             label="Status rujukan"
             value={form.status_rujukan}
@@ -618,11 +650,13 @@ export default function EditUkpPage() {
           type="button"
           onClick={saveData}
           disabled={saving}
-          className="w-full rounded-2xl bg-slate-900 px-6 py-4 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+          className="w-full rounded-2xl bg-slate-900 px-6 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
         >
+
           {saving
             ? "Menyimpan..."
             : "💾 Simpan Perubahan"}
+
         </button>
 
       </div>
@@ -691,7 +725,7 @@ function Input({
           onChange={(e) =>
             onChange(e.target.value)
           }
-          className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:bg-white ${
+          className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-teal-400 focus:bg-white ${
             suffix ? "pr-12" : ""
           }`}
         />
@@ -736,7 +770,7 @@ function Select({
         onChange={(e) =>
           onChange(e.target.value)
         }
-        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:bg-white"
+        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-teal-400 focus:bg-white"
       >
 
         <option value="">
@@ -785,7 +819,7 @@ function Textarea({
         onChange={(e) =>
           onChange(e.target.value)
         }
-        className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:bg-white"
+        className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-teal-400 focus:bg-white"
       />
 
     </div>

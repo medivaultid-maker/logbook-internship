@@ -74,7 +74,8 @@ function escapeHtml(value: string): string {
 ===================================================== */
 
 async function saveUKPToSupabase(
-  data: Record<string, string>
+  data: Record<string, string>,
+  chatId: number
 ) {
   if (!SUPABASE_URL) {
     throw new Error("SUPABASE_URL belum diatur");
@@ -85,6 +86,32 @@ async function saveUKPToSupabase(
       "SUPABASE_SERVICE_ROLE_KEY belum diatur"
     );
   }
+
+
+const profileResponse = await fetch(
+  `${SUPABASE_URL}/rest/v1/profiles?telegram_chat_id=eq.${chatId}&select=id`,
+  {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY!}`,
+    },
+    cache: "no-store",
+  }
+);
+
+if (!profileResponse.ok) {
+  throw new Error("Gagal mencari akun pemilik Telegram.");
+}
+
+const profiles = await profileResponse.json();
+
+if (profiles.length !== 1) {
+  throw new Error(
+    "Telegram belum terhubung ke tepat satu akun website."
+  );
+}
+
+const userId = profiles[0].id;
 
   // =====================================================
   // VALIDASI SEMUA FIELD WAJIB
@@ -154,6 +181,8 @@ async function saveUKPToSupabase(
   // =====================================================
 
   const payload = {
+    user_id: userId,
+
     tanggal_pelayanan:
       data.tanggal_pelayanan,
 
@@ -1602,9 +1631,11 @@ export async function POST(
         }
 
         try {
-          await saveUKPToSupabase(
-            session.data
-          );
+         
+await saveUKPToSupabase(
+  session.data,
+  callbackChatId
+);
 
           console.log(
             "UKP BERHASIL DISIMPAN:",
