@@ -132,8 +132,6 @@ const userId = profiles[0].id;
     "anamnesis",
     "pemeriksaan_fisik",
     "pemeriksaan_penunjang",
-    "diagnosis",
-    "diagnosis_banding",
     "farmakoterapi",
     "non_farmakoterapi",
     "monitoring_evaluasi",
@@ -221,12 +219,6 @@ const userId = profiles[0].id;
 
     pemeriksaan_penunjang:
       data.pemeriksaan_penunjang,
-
-    diagnosis:
-      data.diagnosis,
-
-    diagnosis_banding:
-      data.diagnosis_banding,
 
     farmakoterapi:
       data.farmakoterapi,
@@ -1003,10 +995,6 @@ async function showUKPReview(
       d.pemeriksaan_penunjang
     )}\n\n` +
 
-    `🩺 <b>Diagnosis:</b>\n${escapeHtml(
-      d.diagnosis
-    )}\n\n` +
-
     `💊 <b>Farmakoterapi:</b>\n${escapeHtml(
       d.farmakoterapi
     )}\n\n` +
@@ -1017,10 +1005,6 @@ async function showUKPReview(
 
     `📊 <b>Monitoring & evaluasi:</b>\n${escapeHtml(
       d.monitoring_evaluasi
-    )}\n\n` +
-
-    `🔍 <b>Diagnosis banding:</b>\n${escapeHtml(
-      d.diagnosis_banding
     )}\n\n` +
 
     `🚑 <b>Status rujukan:</b> ${escapeHtml(
@@ -2396,77 +2380,18 @@ await saveUKPToSupabase(
           text;
 
         session.step =
-          "ukp_diagnosis";
-
-        await telegram(
-          "sendMessage",
-          {
-            chat_id: chatId,
-
-            text:
-              "🩺 <b>Diagnosis</b>\n\n" +
-              "Masukkan diagnosis utama pasien.\n\n" +
-              "⚠️ Diagnosis wajib diisi.",
-
-            parse_mode:
-              "HTML",
-          }
-        );
-
-        return NextResponse.json({
-          ok: true,
-        });
-      }
-
-      /* ===============================================
-         DIAGNOSIS
-      =============================================== */
-
-      if (
-        session.step ===
-        "ukp_diagnosis"
-      ) {
-        if (!text) {
-          await telegram(
-            "sendMessage",
-            {
-              chat_id: chatId,
-
-              text:
-                "⚠️ <b>Diagnosis wajib diisi.</b>\n\n" +
-                "Silakan masukkan diagnosis pasien.",
-
-              parse_mode:
-                "HTML",
-            }
-          );
-
-          return NextResponse.json({
-            ok: true,
-          });
-        }
-
-        session.data.diagnosis =
-          text;
-
-        session.step =
           "ukp_farmakoterapi";
 
-        await telegram(
-          "sendMessage",
-          {
-            chat_id: chatId,
-
-            text:
-              "💊 <b>Farmakoterapi</b>\n\n" +
-              "Masukkan farmakoterapi yang diberikan.\n\n" +
-              "Jika tidak ada, ketik <code>Tidak ada</code>.\n\n" +
-              "⚠️ Field ini tetap wajib diisi.",
-
-            parse_mode:
-              "HTML",
-          }
-        );
+       await telegram(
+  "sendMessage",
+  {
+    chat_id: chatId,
+    text:
+      "💊 <b>Farmakoterapi</b>\n\n" +
+      "Masukkan farmakoterapi yang diberikan kepada pasien.",
+    parse_mode: "HTML",
+  }
+);
 
         return NextResponse.json({
           ok: true,
@@ -2618,67 +2543,9 @@ await saveUKPToSupabase(
           text;
 
         session.step =
-          "ukp_diagnosis_banding";
-
-        await telegram(
-          "sendMessage",
-          {
-            chat_id: chatId,
-
-            text:
-              "🔍 <b>Diagnosis Banding</b>\n\n" +
-              "Masukkan diagnosis banding.\n\n" +
-              "Jika tidak ada, ketik <code>Tidak ada</code>.\n\n" +
-              "⚠️ Field ini tetap wajib diisi.",
-
-            parse_mode:
-              "HTML",
-          }
-        );
-
-        return NextResponse.json({
-          ok: true,
-        });
-      }
-
-      /* ===============================================
-         DIAGNOSIS BANDING
-      =============================================== */
-
-      if (
-        session.step ===
-        "ukp_diagnosis_banding"
-      ) {
-        if (!text) {
-          await telegram(
-            "sendMessage",
-            {
-              chat_id: chatId,
-
-              text:
-                "⚠️ <b>Diagnosis banding wajib diisi.</b>\n\n" +
-                "Jika tidak ada, ketik <code>Tidak ada</code>.",
-
-              parse_mode:
-                "HTML",
-            }
-          );
-
-          return NextResponse.json({
-            ok: true,
-          });
-        }
-
-        session.data
-          .diagnosis_banding =
-          text;
-
-        session.step =
           "ukp_status_rujukan";
 
-        await askStatusRujukan(
-          chatId
-        );
+        await askStatusRujukan(chatId);
 
         return NextResponse.json({
           ok: true,

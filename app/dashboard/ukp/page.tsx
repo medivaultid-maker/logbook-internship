@@ -1,6 +1,5 @@
 "use client";
 
-import SearchableDiagnosis from "@/components/SearchableDiagnosis";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -22,8 +21,6 @@ type UKP = {
   anamnesis: string;
   pemeriksaan_fisik: string;
   pemeriksaan_penunjang: string;
-  diagnosis: string;
-  diagnosis_banding: string;
   farmakoterapi: string;
   non_farmakoterapi: string;
   monitoring_evaluasi: string;
@@ -115,9 +112,6 @@ export default function UKPPage() {
     pemeriksaan_fisik: "",
     pemeriksaan_penunjang: "",
 
-    diagnosis: "",
-    diagnosis_banding: "",
-
     farmakoterapi: "",
     non_farmakoterapi: "",
 
@@ -125,19 +119,6 @@ export default function UKPPage() {
 
     status_rujukan: "",
   });
-
-  const [diagnosis, setDiagnosis] = useState<{
-    id: string;
-    code: string | null;
-    name: string;
-  } | null>(null);
-
-  const [diagnosisBanding, setDiagnosisBanding] =
-    useState<{
-      id: string;
-      code: string | null;
-      name: string;
-    } | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -225,8 +206,6 @@ export default function UKPPage() {
         "Pemeriksaan penunjang",
         form.pemeriksaan_penunjang,
       ],
-      ["Diagnosis", diagnosis?.name],
-      ["Diagnosis banding", diagnosisBanding?.name],
       ["Farmakoterapi", form.farmakoterapi],
       [
         "Non-farmakoterapi",
@@ -297,12 +276,6 @@ export default function UKPPage() {
         pemeriksaan_penunjang:
           form.pemeriksaan_penunjang,
 
-        diagnosis:
-          diagnosis?.name ?? "",
-
-        diagnosis_banding:
-          diagnosisBanding?.name ?? "",
-
         farmakoterapi:
           form.farmakoterapi,
 
@@ -366,9 +339,6 @@ export default function UKPPage() {
       pemeriksaan_fisik: "",
       pemeriksaan_penunjang: "",
 
-      diagnosis: "",
-      diagnosis_banding: "",
-
       farmakoterapi: "",
       non_farmakoterapi: "",
 
@@ -376,9 +346,6 @@ export default function UKPPage() {
 
       status_rujukan: "",
     });
-
-    setDiagnosis(null);
-    setDiagnosisBanding(null);
 
     /* REFRESH DATA */
 
@@ -403,9 +370,6 @@ export default function UKPPage() {
           ?.toLowerCase()
           .includes(keyword) ||
         entry.inisial_pasien
-          ?.toLowerCase()
-          .includes(keyword) ||
-        entry.diagnosis
           ?.toLowerCase()
           .includes(keyword) ||
         entry.jenis_tindakan
@@ -485,7 +449,7 @@ export default function UKPPage() {
               onChange={(e) =>
                 setSearch(e.target.value)
               }
-              placeholder="🔎 Cari No. RM, inisial, diagnosis..."
+              placeholder="🔎 Cari No. RM, inisial, jenis tindakan..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-teal-400 focus:bg-white"
             />
 
@@ -538,10 +502,6 @@ export default function UKPPage() {
 
                     <th className="px-4 py-3 font-semibold">
                       Kategori
-                    </th>
-
-                    <th className="px-4 py-3 font-semibold">
-                      Diagnosis
                     </th>
 
                     <th className="px-4 py-3 font-semibold">
@@ -603,10 +563,6 @@ export default function UKPPage() {
                             {entry.kategori_kasus}
                           </div>
 
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {entry.diagnosis}
                         </td>
 
                         <td className="px-4 py-3">
@@ -820,13 +776,6 @@ export default function UKPPage() {
                 }
               />
 
-              <SearchableDiagnosis
-                label="Diagnosis / masalah"
-                value={diagnosis}
-                onChange={setDiagnosis}
-                placeholder="🔎 Cari diagnosis ICD-10..."
-              />
-
               <Textarea
                 label="Farmakoterapi"
                 value={form.farmakoterapi}
@@ -863,13 +812,6 @@ export default function UKPPage() {
                     value
                   )
                 }
-              />
-
-              <SearchableDiagnosis
-                label="Diagnosis Banding"
-                value={diagnosisBanding}
-                onChange={setDiagnosisBanding}
-                placeholder="🔎 Cari diagnosis banding ICD-10..."
               />
 
             </div>
