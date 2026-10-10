@@ -58,7 +58,7 @@ const kategoriPasien = [
 ];
 
 const kategoriKasus = [
-  "Non-Covid",
+  "Non-COVID",
   "Suspect",
   "Probable",
   "Kontak Erat",
@@ -67,7 +67,7 @@ const kategoriKasus = [
 
 const statusRujukan = [
   "Rujuk",
-  "Tidak rujuk",
+  "Tidak Rujuk",
 ];
 
 export default function EditUkpPage() {
