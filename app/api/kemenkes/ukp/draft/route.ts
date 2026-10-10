@@ -83,6 +83,17 @@ console.log("[KEMENKES DRAFT] PAYLOAD:", payload);
     console.log("[KEMENKES DRAFT] STATUS:", response.status);
     console.log("[KEMENKES DRAFT] RESPONSE:", result);
 
+    console.log("[KEMENKES DRAFT] DROPDOWN DIKIRIM:", {
+  kode_kegiatan: payload.kode_kegiatan,
+  patient_cat: payload.patient_cat,
+  special_cat: payload.special_cat,
+});
+
+console.log("[KEMENKES DRAFT] HASIL API:", {
+  httpStatus: response.status,
+  body: result,
+});
+
     if (!response.ok) {
       return NextResponse.json(
         {
