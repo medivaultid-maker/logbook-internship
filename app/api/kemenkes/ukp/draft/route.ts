@@ -46,6 +46,15 @@ export async function POST(request: Request) {
       is_submit: false,
     };
 
+
+console.log("[KEMENKES DRAFT] NILAI DROPDOWN:", {
+  jenis_tindakan: entry.jenis_tindakan,
+  kategori_pasien: entry.kategori_pasien,
+  kategori_kasus: entry.kategori_kasus,
+});
+
+console.log("[KEMENKES DRAFT] PAYLOAD:", payload);
+
     console.log("[KEMENKES DRAFT] MULAI FETCH API");
 
     const response = await fetch(
