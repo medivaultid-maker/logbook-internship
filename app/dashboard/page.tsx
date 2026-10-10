@@ -361,55 +361,50 @@ function EntryCard({
   ======================================================= */
 
   async function handleSendToKemenkes() {
+    console.log("[DASHBOARD] TOMBOL KEMENKES DIKLIK");
+    console.log("[DASHBOARD] ENTRY:", entry);
+
     setSending(true);
     setSyncMessage("");
     setSyncError("");
 
     try {
-      const response = await fetch(
-        "/api/kemenkes/ukp/draft",
-        {
-          method: "POST",
+      console.log("[DASHBOARD] MEMANGGIL API KEMENKES");
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+      const response = await fetch("/api/kemenkes/ukp/draft", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(entry),
+      });
 
-          body: JSON.stringify(entry),
-        }
+      console.log(
+        "[DASHBOARD] STATUS RESPONSE:",
+        response.status
       );
 
       const result = await response.json();
 
-      console.log(
-        "KEMENKES SYNC RESULT:",
-        result
-      );
+      console.log("[DASHBOARD] KEMENKES RESULT:", result);
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message ||
-            "Gagal mengirim data ke Kemenkes."
+          result.message || "Gagal mengirim data ke Kemenkes."
         );
       }
 
       setSyncMessage(
         "Data berhasil dibuat sebagai Draft Kemenkes."
       );
-
     } catch (error) {
-
-      console.error(
-        "KEMENKES SYNC ERROR:",
-        error
-      );
+      console.error("[DASHBOARD] KEMENKES ERROR:", error);
 
       setSyncError(
         error instanceof Error
           ? error.message
           : "Terjadi kesalahan."
       );
-
     } finally {
       setSending(false);
     }
