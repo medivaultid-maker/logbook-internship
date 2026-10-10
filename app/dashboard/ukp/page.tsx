@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -28,6 +29,26 @@ type UKP = {
   created_at: string;
   updated_at: string;
   inisial_pasien: string;
+};
+
+type FormUKP = {
+  jenis_tindakan: string;
+  no_rm: string;
+  sumber_data: string;
+  tanggal_pelayanan: string;
+  inisial_pasien: string;
+  jenis_kelamin: string;
+  kategori_pasien: string;
+  kategori_kasus: string;
+  tb: string;
+  bb: string;
+  anamnesis: string;
+  pemeriksaan_fisik: string;
+  pemeriksaan_penunjang: string;
+  farmakoterapi: string;
+  non_farmakoterapi: string;
+  monitoring_evaluasi: string;
+  status_rujukan: string;
 };
 
 /* =========================================================
@@ -74,57 +95,54 @@ const statusRujukan = [
 ];
 
 /* =========================================================
-   PAGE
+   FORM KOSONG
 ========================================================= */
 
-export default function UKPPage() {
-  /* =======================================================
-     DATA DARI SUPABASE
-  ======================================================= */
-
-  const [entries, setEntries] = useState<UKP[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
-
-  const [search, setSearch] = useState("");
-
-  /* =======================================================
-     FORM
-  ======================================================= */
-
-  const [form, setForm] = useState({
+function createEmptyForm(): FormUKP {
+  return {
     jenis_tindakan: "",
     no_rm: "",
     sumber_data: "",
     tanggal_pelayanan: new Date()
       .toISOString()
       .split("T")[0],
-
     inisial_pasien: "",
     jenis_kelamin: "",
-
     kategori_pasien: "",
     kategori_kasus: "",
-
     tb: "",
     bb: "",
-
     anamnesis: "",
     pemeriksaan_fisik: "",
     pemeriksaan_penunjang: "",
-
     farmakoterapi: "",
     non_farmakoterapi: "",
-
     monitoring_evaluasi: "",
-
     status_rujukan: "",
-  });
+  };
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
+
+export default function UKPPage() {
+  const [entries, setEntries] = useState<UKP[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const [form, setForm] = useState<FormUKP>(
+    createEmptyForm
+  );
 
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(
+    null
+  );
   const [message, setMessage] = useState("");
 
   /* =======================================================
-     AMBIL DATA UKP DARI SUPABASE
+     AMBIL DATA UKP
   ======================================================= */
 
   async function loadUKP() {
@@ -142,25 +160,19 @@ export default function UKPPage() {
 
     if (error) {
       console.error("Gagal mengambil data UKP:", error);
-
       setMessage(
-        `Gagal mengambil data UKP: ${error.message}`
+        `❌ Gagal mengambil data UKP: ${error.message}`
       );
-
-      setEntries([]);
-    } else {
-      setEntries(data ?? []);
+      setLoadingData(false);
+      return;
     }
 
+    setEntries((data ?? []) as UKP[]);
     setLoadingData(false);
   }
 
-  /* =======================================================
-     LOAD SAAT HALAMAN DIBUKA
-  ======================================================= */
-
   useEffect(() => {
-    loadUKP();
+    void loadUKP();
   }, []);
 
   /* =======================================================
@@ -168,7 +180,7 @@ export default function UKPPage() {
   ======================================================= */
 
   function updateField(
-    field: keyof typeof form,
+    field: keyof FormUKP,
     value: string
   ) {
     setForm((prev) => ({
@@ -178,18 +190,14 @@ export default function UKPPage() {
   }
 
   /* =======================================================
-     SIMPAN DATA DARI DASHBOARD
+     SIMPAN DATA UKP
   ======================================================= */
 
   async function saveData() {
     setLoading(true);
     setMessage("");
 
-    /* ===============================================
-       VALIDASI SEMUA FIELD
-    =============================================== */
-
-    const requiredFields = [
+    const requiredFields: [string, string][] = [
       ["Jenis tindakan", form.jenis_tindakan],
       ["No. Rekam Medis", form.no_rm],
       ["Sumber data", form.sumber_data],
@@ -202,182 +210,147 @@ export default function UKPPage() {
       ["BB", form.bb],
       ["Anamnesis", form.anamnesis],
       ["Pemeriksaan fisik", form.pemeriksaan_fisik],
-      [
-        "Pemeriksaan penunjang",
-        form.pemeriksaan_penunjang,
-      ],
+      ["Pemeriksaan penunjang", form.pemeriksaan_penunjang],
       ["Farmakoterapi", form.farmakoterapi],
-      [
-        "Non-farmakoterapi",
-        form.non_farmakoterapi,
-      ],
-      [
-        "Monitoring dan evaluasi",
-        form.monitoring_evaluasi,
-      ],
+      ["Non-farmakoterapi", form.non_farmakoterapi],
+      ["Monitoring dan evaluasi", form.monitoring_evaluasi],
       ["Status rujukan", form.status_rujukan],
     ];
 
     const emptyField = requiredFields.find(
-      ([, value]) =>
-        !value ||
-        String(value).trim() === ""
+      ([, value]) => !value || value.trim() === ""
     );
 
     if (emptyField) {
-      setMessage(
-        `⚠️ ${emptyField[0]} wajib diisi.`
-      );
-
+      setMessage(`⚠️ ${emptyField[0]} wajib diisi.`);
       setLoading(false);
       return;
     }
 
-    /* ===============================================
-       INSERT KE TABEL ukp
-    =============================================== */
+    const tb = Number(form.tb);
+    const bb = Number(form.bb);
+
+    if (
+      !Number.isFinite(tb) ||
+      !Number.isFinite(bb) ||
+      tb <= 0 ||
+      bb <= 0
+    ) {
+      setMessage(
+        "⚠️ Tinggi badan dan berat badan harus lebih dari 0."
+      );
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase
       .from("ukp")
       .insert({
-        tanggal_pelayanan:
-          form.tanggal_pelayanan,
-
-        no_rm:
-          form.no_rm,
-
-        jenis_tindakan:
-          form.jenis_tindakan,
-
-        sumber_data:
-          form.sumber_data,
-
-        jenis_kelamin:
-          form.jenis_kelamin,
-
-        kategori_pasien:
-          form.kategori_pasien,
-
-        kategori_kasus:
-          form.kategori_kasus,
-
-        tb:
-          Number(form.tb),
-
-        bb:
-          Number(form.bb),
-
-        anamnesis:
-          form.anamnesis,
-
-        pemeriksaan_fisik:
-          form.pemeriksaan_fisik,
-
-        pemeriksaan_penunjang:
-          form.pemeriksaan_penunjang,
-
-        farmakoterapi:
-          form.farmakoterapi,
-
-        non_farmakoterapi:
-          form.non_farmakoterapi,
-
-        monitoring_evaluasi:
-          form.monitoring_evaluasi,
-
-        status_rujukan:
-          form.status_rujukan,
-
-        inisial_pasien:
-          form.inisial_pasien,
+        tanggal_pelayanan: form.tanggal_pelayanan,
+        no_rm: form.no_rm.trim(),
+        jenis_tindakan: form.jenis_tindakan,
+        sumber_data: form.sumber_data,
+        jenis_kelamin: form.jenis_kelamin,
+        kategori_pasien: form.kategori_pasien,
+        kategori_kasus: form.kategori_kasus,
+        tb,
+        bb,
+        anamnesis: form.anamnesis,
+        pemeriksaan_fisik: form.pemeriksaan_fisik,
+        pemeriksaan_penunjang: form.pemeriksaan_penunjang,
+        farmakoterapi: form.farmakoterapi,
+        non_farmakoterapi: form.non_farmakoterapi,
+        monitoring_evaluasi: form.monitoring_evaluasi,
+        status_rujukan: form.status_rujukan,
+        inisial_pasien: form.inisial_pasien.trim(),
       });
 
     if (error) {
-      console.error(
-        "Gagal menyimpan UKP:",
-        error
-      );
-
-      setMessage(
-        `❌ Gagal menyimpan: ${error.message}`
-      );
-
+      console.error("Gagal menyimpan UKP:", error);
+      setMessage(`❌ Gagal menyimpan: ${error.message}`);
       setLoading(false);
       return;
     }
 
-    /* ===============================================
-       BERHASIL
-    =============================================== */
-
-    setMessage(
-      "✅ Data UKP berhasil disimpan."
-    );
-
-    /* RESET */
-
-    setForm({
-      jenis_tindakan: "",
-      no_rm: "",
-      sumber_data: "",
-
-      tanggal_pelayanan:
-        new Date()
-          .toISOString()
-          .split("T")[0],
-
-      inisial_pasien: "",
-      jenis_kelamin: "",
-
-      kategori_pasien: "",
-      kategori_kasus: "",
-
-      tb: "",
-      bb: "",
-
-      anamnesis: "",
-      pemeriksaan_fisik: "",
-      pemeriksaan_penunjang: "",
-
-      farmakoterapi: "",
-      non_farmakoterapi: "",
-
-      monitoring_evaluasi: "",
-
-      status_rujukan: "",
-    });
-
-    /* REFRESH DATA */
+    setForm(createEmptyForm());
+    setMessage("✅ Data UKP berhasil disimpan.");
 
     await loadUKP();
-
     setLoading(false);
   }
 
   /* =======================================================
-     FILTER SEARCH
+     HAPUS DATA UKP
   ======================================================= */
 
-  const filteredEntries = entries.filter(
-    (entry) => {
-      const keyword =
-        search.toLowerCase().trim();
+  async function deleteUKP(entry: UKP) {
+    if (deletingId !== null) return;
 
-      if (!keyword) return true;
+    const confirmed = window.confirm(
+      `Yakin ingin menghapus data UKP ini?\n\n` +
+        `Tanggal: ${formatDate(entry.tanggal_pelayanan)}\n` +
+        `No. RM: ${entry.no_rm}\n` +
+        `Pasien: ${entry.inisial_pasien}\n\n` +
+        `Data yang dihapus tidak dapat dipulihkan.`
+    );
 
-      return (
-        entry.no_rm
-          ?.toLowerCase()
-          .includes(keyword) ||
-        entry.inisial_pasien
-          ?.toLowerCase()
-          .includes(keyword) ||
-        entry.jenis_tindakan
-          ?.toLowerCase()
-          .includes(keyword)
+    if (!confirmed) return;
+
+    setDeletingId(entry.id);
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase
+        .from("ukp")
+        .delete()
+        .eq("id", entry.id)
+        .select("id");
+
+      if (error) {
+        console.error("Gagal menghapus UKP:", error);
+        setMessage(
+          `❌ Gagal menghapus data UKP: ${error.message}`
+        );
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setMessage(
+          "⚠️ Tidak ada data yang terhapus. Periksa izin DELETE dan SELECT pada kebijakan RLS Supabase."
+        );
+        return;
+      }
+
+      setEntries((prev) =>
+        prev.filter((item) => item.id !== entry.id)
       );
+
+      setMessage("✅ Data UKP berhasil dihapus.");
+    } catch (error) {
+      console.error("Terjadi kesalahan saat menghapus UKP:", error);
+      setMessage(
+        "❌ Terjadi kesalahan saat menghapus data. Silakan coba lagi."
+      );
+    } finally {
+      setDeletingId(null);
     }
-  );
+  }
+
+  /* =======================================================
+     FILTER PENCARIAN
+  ======================================================= */
+
+  const keyword = search.toLowerCase().trim();
+
+  const filteredEntries = entries.filter((entry) => {
+    if (!keyword) return true;
+
+    return (
+      entry.no_rm?.toLowerCase().includes(keyword) ||
+      entry.inisial_pasien?.toLowerCase().includes(keyword) ||
+      entry.jenis_tindakan?.toLowerCase().includes(keyword)
+    );
+  });
 
   /* =======================================================
      UI
@@ -385,15 +358,11 @@ export default function UKPPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-
       <div className="mx-auto max-w-7xl px-6 py-10">
 
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div className="mb-8">
-
           <p className="text-sm font-semibold text-teal-600">
             LOGBOOK INTERNSIP
           </p>
@@ -405,222 +374,186 @@ export default function UKPPage() {
           <p className="mt-2 text-slate-500">
             Upaya Kesehatan Perseorangan
           </p>
-
         </div>
 
-
-        {/* =================================================
-            DATA UKP YANG SUDAH TERSIMPAN
-        ================================================= */}
+        {/* DATA UKP */}
 
         <section className="mb-8 rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-
             <div>
               <h2 className="text-lg font-bold">
                 Data UKP
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Data dari Telegram dan dashboard
-                tersimpan di tabel <b>ukp</b>.
+                Data dari Telegram dan dashboard tersimpan di
+                tabel <b>ukp</b>.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={loadUKP}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              onClick={() => void loadUKP()}
+              disabled={loadingData}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
             >
-              🔄 Refresh
+              {loadingData ? "Memuat..." : "🔄 Refresh"}
             </button>
-
           </div>
 
+          {/* NOTIFIKASI */}
+
+          {message && (
+            <div
+              role="status"
+              className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm"
+            >
+              {message}
+            </div>
+          )}
 
           {/* SEARCH */}
 
           <div className="mt-5">
-
             <input
               type="text"
               value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="🔎 Cari No. RM, inisial, jenis tindakan..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-teal-400 focus:bg-white"
             />
-
           </div>
-
 
           {/* TABLE */}
 
-          <div className="mt-5 overflow-x-auto">
-
+          <div className="mt-5 overflow-x-scroll rounded-xl border border-slate-200">
             {loadingData ? (
-
               <div className="py-10 text-center text-sm text-slate-500">
                 Memuat data UKP...
               </div>
-
             ) : filteredEntries.length === 0 ? (
-
               <div className="py-10 text-center text-sm text-slate-500">
                 Belum ada data UKP.
               </div>
-
             ) : (
-
               <table className="w-full min-w-[1100px] text-sm">
-
                 <thead>
-
                   <tr className="border-b border-slate-200 text-left">
-
                     <th className="px-4 py-3 font-semibold">
                       Tanggal
                     </th>
-
                     <th className="px-4 py-3 font-semibold">
                       No. RM
                     </th>
-
                     <th className="px-4 py-3 font-semibold">
                       Pasien
                     </th>
-
                     <th className="px-4 py-3 font-semibold">
                       Tindakan
                     </th>
-
                     <th className="px-4 py-3 font-semibold">
                       Sumber
                     </th>
-
                     <th className="px-4 py-3 font-semibold">
                       Kategori
                     </th>
-
                     <th className="px-4 py-3 font-semibold">
                       Rujukan
                     </th>
-
+                    <th className="sticky right-0 z-10 bg-slate-100 px-4 py-3 text-center font-semibold">
+  Aksi
+</th>
                   </tr>
-
                 </thead>
 
-
                 <tbody>
+                  {filteredEntries.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      className="border-b border-slate-100 hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-3">
+                        {formatDate(entry.tanggal_pelayanan)}
+                      </td>
 
-                  {filteredEntries.map(
-                    (entry) => (
+                      <td className="px-4 py-3">
+                        {entry.no_rm}
+                      </td>
 
-                      <tr
-                        key={entry.id}
-                        className="border-b border-slate-100 hover:bg-slate-50"
-                      >
+                      <td className="px-4 py-3">
+                        <div className="font-medium">
+                          {entry.inisial_pasien}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {entry.jenis_kelamin}
+                        </div>
+                      </td>
 
-                        <td className="px-4 py-3">
-                          {formatDate(
-                            entry.tanggal_pelayanan
-                          )}
-                        </td>
+                      <td className="px-4 py-3">
+                        {entry.jenis_tindakan}
+                      </td>
 
-                        <td className="px-4 py-3">
-                          {entry.no_rm}
-                        </td>
+                      <td className="px-4 py-3">
+                        {entry.sumber_data}
+                      </td>
 
-                        <td className="px-4 py-3">
+                      <td className="px-4 py-3">
+                        <div>{entry.kategori_pasien}</div>
+                        <div className="text-xs text-slate-500">
+                          {entry.kategori_kasus}
+                        </div>
+                      </td>
 
-                          <div className="font-medium">
-                            {entry.inisial_pasien}
-                          </div>
+                      <td className="px-4 py-3">
+                        {entry.status_rujukan}
+                      </td>
 
-                          <div className="text-xs text-slate-500">
-                            {entry.jenis_kelamin}
-                          </div>
-
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {entry.jenis_tindakan}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {entry.sumber_data}
-                        </td>
-
-                        <td className="px-4 py-3">
-
-                          <div>
-                            {entry.kategori_pasien}
-                          </div>
-
-                          <div className="text-xs text-slate-500">
-                            {entry.kategori_kasus}
-                          </div>
-
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {entry.status_rujukan}
-                        </td>
-
-                      </tr>
-
-                    )
-                  )}
-
+                      <td className="sticky right-0 bg-white px-4 py-3 text-center">
+  <button
+    type="button"
+    onClick={() => void deleteUKP(entry)}
+    disabled={deletingId !== null}
+    className="whitespace-nowrap rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {deletingId === entry.id ? "Menghapus..." : "🗑️ Hapus"}
+  </button>
+</td>
+                    </tr>
+                  ))}
                 </tbody>
-
               </table>
-
             )}
-
           </div>
-
 
           {/* JUMLAH DATA */}
 
           {!loadingData && (
             <div className="mt-4 text-sm text-slate-500">
               Menampilkan{" "}
-              <b>{filteredEntries.length}</b>{" "}
-              dari <b>{entries.length}</b> data UKP.
+              <b>{filteredEntries.length}</b> dari{" "}
+              <b>{entries.length}</b> data UKP.
             </div>
           )}
-
         </section>
 
-
-        {/* =================================================
-            FORM INPUT
-        ================================================= */}
+        {/* FORM INPUT */}
 
         <div className="space-y-6">
 
           {/* IDENTITAS */}
 
           <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-
             <h2 className="text-lg font-bold">
               Input Data UKP
             </h2>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
-
               <SelectField
                 label="Jenis Tindakan"
                 value={form.jenis_tindakan}
                 options={jenisTindakan}
                 onChange={(value) =>
-                  updateField(
-                    "jenis_tindakan",
-                    value
-                  )
+                  updateField("jenis_tindakan", value)
                 }
               />
 
@@ -628,10 +561,7 @@ export default function UKPPage() {
                 label="No. Rekam Medis"
                 value={form.no_rm}
                 onChange={(value) =>
-                  updateField(
-                    "no_rm",
-                    value
-                  )
+                  updateField("no_rm", value)
                 }
               />
 
@@ -640,10 +570,7 @@ export default function UKPPage() {
                 value={form.sumber_data}
                 options={sumberData}
                 onChange={(value) =>
-                  updateField(
-                    "sumber_data",
-                    value
-                  )
+                  updateField("sumber_data", value)
                 }
               />
 
@@ -652,10 +579,7 @@ export default function UKPPage() {
                 type="date"
                 value={form.tanggal_pelayanan}
                 onChange={(value) =>
-                  updateField(
-                    "tanggal_pelayanan",
-                    value
-                  )
+                  updateField("tanggal_pelayanan", value)
                 }
               />
 
@@ -663,10 +587,7 @@ export default function UKPPage() {
                 label="Inisial pasien"
                 value={form.inisial_pasien}
                 onChange={(value) =>
-                  updateField(
-                    "inisial_pasien",
-                    value
-                  )
+                  updateField("inisial_pasien", value)
                 }
               />
 
@@ -675,10 +596,7 @@ export default function UKPPage() {
                 value={form.jenis_kelamin}
                 options={jenisKelamin}
                 onChange={(value) =>
-                  updateField(
-                    "jenis_kelamin",
-                    value
-                  )
+                  updateField("jenis_kelamin", value)
                 }
               />
 
@@ -687,10 +605,7 @@ export default function UKPPage() {
                 value={form.kategori_pasien}
                 options={kategoriPasien}
                 onChange={(value) =>
-                  updateField(
-                    "kategori_pasien",
-                    value
-                  )
+                  updateField("kategori_pasien", value)
                 }
               />
 
@@ -699,10 +614,7 @@ export default function UKPPage() {
                 value={form.kategori_kasus}
                 options={kategoriKasus}
                 onChange={(value) =>
-                  updateField(
-                    "kategori_kasus",
-                    value
-                  )
+                  updateField("kategori_kasus", value)
                 }
               />
 
@@ -725,30 +637,22 @@ export default function UKPPage() {
                   updateField("tb", value)
                 }
               />
-
             </div>
-
           </section>
-
 
           {/* DATA KLINIS */}
 
           <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-
             <h2 className="text-lg font-bold">
               Data Klinis
             </h2>
 
             <div className="mt-5 space-y-5">
-
               <Textarea
                 label="Anamnesis"
                 value={form.anamnesis}
                 onChange={(value) =>
-                  updateField(
-                    "anamnesis",
-                    value
-                  )
+                  updateField("anamnesis", value)
                 }
               />
 
@@ -756,23 +660,15 @@ export default function UKPPage() {
                 label="Pemeriksaan fisik"
                 value={form.pemeriksaan_fisik}
                 onChange={(value) =>
-                  updateField(
-                    "pemeriksaan_fisik",
-                    value
-                  )
+                  updateField("pemeriksaan_fisik", value)
                 }
               />
 
               <Textarea
                 label="Pemeriksaan penunjang"
-                value={
-                  form.pemeriksaan_penunjang
-                }
+                value={form.pemeriksaan_penunjang}
                 onChange={(value) =>
-                  updateField(
-                    "pemeriksaan_penunjang",
-                    value
-                  )
+                  updateField("pemeriksaan_penunjang", value)
                 }
               />
 
@@ -780,85 +676,54 @@ export default function UKPPage() {
                 label="Farmakoterapi"
                 value={form.farmakoterapi}
                 onChange={(value) =>
-                  updateField(
-                    "farmakoterapi",
-                    value
-                  )
+                  updateField("farmakoterapi", value)
                 }
                 placeholder="Contoh: Paracetamol 500 mg 3x1"
               />
 
               <Textarea
                 label="Non-Farmakoterapi"
-                value={
-                  form.non_farmakoterapi
-                }
+                value={form.non_farmakoterapi}
                 onChange={(value) =>
-                  updateField(
-                    "non_farmakoterapi",
-                    value
-                  )
+                  updateField("non_farmakoterapi", value)
                 }
               />
 
               <Textarea
                 label="Monitoring dan evaluasi"
-                value={
-                  form.monitoring_evaluasi
-                }
+                value={form.monitoring_evaluasi}
                 onChange={(value) =>
-                  updateField(
-                    "monitoring_evaluasi",
-                    value
-                  )
+                  updateField("monitoring_evaluasi", value)
                 }
               />
-
             </div>
-
           </section>
-
 
           {/* RUJUKAN */}
 
           <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
-
             <h2 className="text-lg font-bold">
               Status Rujukan
             </h2>
 
             <div className="mt-5">
-
               <SelectField
                 label="Status rujukan"
                 value={form.status_rujukan}
                 options={statusRujukan}
                 onChange={(value) =>
-                  updateField(
-                    "status_rujukan",
-                    value
-                  )
+                  updateField("status_rujukan", value)
                 }
               />
-
             </div>
-
           </section>
 
-
-          {/* SAVE */}
+          {/* SIMPAN */}
 
           <section>
-
-            {message && (
-              <div className="mb-4 rounded-xl bg-slate-100 px-4 py-3 text-sm">
-                {message}
-              </div>
-            )}
-
             <button
               type="button"
-              onClick={saveData}
+              onClick={() => void saveData()}
               disabled={loading}
               className="w-full rounded-2xl bg-slate-900 px-6 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
@@ -866,17 +731,12 @@ export default function UKPPage() {
                 ? "Menyimpan..."
                 : "💾 Simpan Data UKP"}
             </button>
-
           </section>
-
         </div>
-
       </div>
-
     </main>
   );
 }
-
 
 /* =========================================================
    FORMAT DATE
@@ -893,7 +753,6 @@ function formatDate(date: string) {
 
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
-
 
 /* =========================================================
    INPUT
@@ -914,19 +773,15 @@ function Input({
 }) {
   return (
     <div>
-
       <label className="mb-2 block text-sm font-medium">
         {label}
       </label>
 
       <div className="relative">
-
         <input
           type={type}
           value={value}
-          onChange={(e) =>
-            onChange(e.target.value)
-          }
+          onChange={(e) => onChange(e.target.value)}
           required
           className={`w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-teal-400 focus:bg-white ${
             suffix ? "pr-12" : ""
@@ -938,13 +793,10 @@ function Input({
             {suffix}
           </span>
         )}
-
       </div>
-
     </div>
   );
 }
-
 
 /* =========================================================
    SELECT
@@ -963,39 +815,29 @@ function SelectField({
 }) {
   return (
     <div>
-
       <label className="mb-2 block text-sm font-medium">
         {label}
       </label>
 
       <select
         value={value}
-        onChange={(e) =>
-          onChange(e.target.value)
-        }
+        onChange={(e) => onChange(e.target.value)}
         required
         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-teal-400 focus:bg-white"
       >
-
         <option value="">
           Pilih {label.toLowerCase()}
         </option>
 
         {options.map((option) => (
-          <option
-            key={option}
-            value={option}
-          >
+          <option key={option} value={option}>
             {option}
           </option>
         ))}
-
       </select>
-
     </div>
   );
 }
-
 
 /* =========================================================
    TEXTAREA
@@ -1014,7 +856,6 @@ function Textarea({
 }) {
   return (
     <div>
-
       <label className="mb-2 block text-sm font-medium">
         {label}
       </label>
@@ -1024,12 +865,9 @@ function Textarea({
         value={value}
         placeholder={placeholder}
         required
-        onChange={(e) =>
-          onChange(e.target.value)
-        }
+        onChange={(e) => onChange(e.target.value)}
         className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-teal-400 focus:bg-white"
       />
-
     </div>
   );
 }
