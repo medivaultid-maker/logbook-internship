@@ -55,6 +55,7 @@ function escapeHtml(value: string): string {
 // /start LANGSUNG MENAMPILKAN EMPAT TOMBOL
 // =====================================================
 
+
 async function sendMainMenu(
   chatId: number,
   messageId?: number
@@ -70,18 +71,11 @@ async function sendMainMenu(
       inline_keyboard: [
         [
           { text: "🩺 UKP", callback_data: "menu_ukp" },
-          { text: "🌱 UKM", callback_data: "menu_ukm" },
         ],
         [
           {
             text: "💉 Tindakan Medis",
             callback_data: "menu_tindakan",
-          },
-        ],
-        [
-          {
-            text: "📋 Mini Project",
-            callback_data: "menu_miniproject",
           },
         ],
       ],
@@ -97,6 +91,7 @@ async function sendMainMenu(
 
   return telegram("sendMessage", body);
 }
+
 
 // =====================================================
 // KEMBALI KE PILIHAN KATEGORI
@@ -919,25 +914,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      // MENU UKM.
-      if (callbackData === "menu_ukm") {
-        await telegram("editMessageText", {
-          chat_id: callbackChatId,
-          message_id: callbackMessageId,
-          text:
-            "🌱 <b>UKM</b>\n\n" +
-            "Fitur pengisian UKM akan dikembangkan pada tahap berikutnya.",
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "⬅️ Kembali", callback_data: "menu_start" }],
-            ],
-          },
-        });
-
-        return NextResponse.json({ ok: true });
-      }
-
       // MENU TINDAKAN MEDIS.
       if (callbackData === "menu_tindakan") {
         await telegram("editMessageText", {
@@ -946,25 +922,6 @@ export async function POST(request: Request) {
           text:
             "💉 <b>Tindakan Medis</b>\n\n" +
             "Fitur pengisian Tindakan Medis akan dikembangkan pada tahap berikutnya.",
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "⬅️ Kembali", callback_data: "menu_start" }],
-            ],
-          },
-        });
-
-        return NextResponse.json({ ok: true });
-      }
-
-      // MENU MINI PROJECT.
-      if (callbackData === "menu_miniproject") {
-        await telegram("editMessageText", {
-          chat_id: callbackChatId,
-          message_id: callbackMessageId,
-          text:
-            "📋 <b>Mini Project</b>\n\n" +
-            "Fitur pengisian Mini Project akan dikembangkan pada tahap berikutnya.",
           parse_mode: "HTML",
           reply_markup: {
             inline_keyboard: [
